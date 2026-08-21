@@ -126,6 +126,10 @@
 .sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--green);flex:none}
 .sync[data-state=guardando]::before{background:var(--gold);animation:pulse 1s infinite}
 .sync[data-state=error]::before{background:var(--red)}
+    /* "Se guardará solo": no es un error, sólo que todavía no hay señal.
+       Mismo color que la insignia de la app de iPhone. */
+    .sync[data-state=espera]::before{background:var(--peach)}
+    .sync[data-state=local]::before{background:var(--muted)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
 @media(max-width:400px){.sync{font-size:11px;padding:8px 11px}}
 

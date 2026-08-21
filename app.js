@@ -17,6 +17,9 @@ const COLS=S.COLLECTIONS;
 const vacio=()=>({ingredients:[],recipes:[],sales:[],expenses:[]});
 let data=vacio(),graves=vacio();
 let CLOUD=false,syncing=false,otraVez=false,syncTimer=null,pullTimer=null,intentos=0,sucio=false;
+// Sube en cada escritura: sirve para saber si ella escribió algo mientras
+// una subida estaba en curso.
+let escrituras=0;
 
 // Documento completo tal como viaja por la red: lo vivo + las lápidas.
 function toWire(){const doc=S.emptyDoc();COLS.forEach(k=>{doc[k]=data[k].concat(graves[k])});doc.updatedAt=Date.now();return doc}
@@ -51,7 +54,7 @@ const sello=rec=>{rec.updatedAt=Date.now();rec.deleted=false;return rec};
 
 const save=(msg)=>{ordenar();if(!saveLocal())return false;
  render();if(msg)toast(msg);
- sucio=true;setSync(CLOUD?'guardando':'local');scheduleSync(400);return true};
+ sucio=true;escrituras++;setSync(CLOUD?'guardando':'local');scheduleSync(400);return true};
 
 function scheduleSync(ms){if(!CLOUD)return;clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,ms==null?400:ms)}
 
@@ -61,7 +64,7 @@ async function syncNow(){
  if(!CLOUD)return;
  if(syncing){otraVez=true;return}
  syncing=true;if(sucio)setSync('guardando');
- const enviado=toWire();
+ const enviado=toWire(),generacion=escrituras;
  try{
   const r=await fetch('api/data',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(enviado),cache:'no-store'});
   if(!r.ok)throw new Error('http '+r.status);
@@ -73,8 +76,9 @@ async function syncNow(){
    fromWire(S.mergeDocs(toWire(),j.doc));
    saveLocal();render()}
   intentos=0;
-  // Sólo damos por sincronizado si el servidor de verdad tiene lo nuestro.
-  sucio=!S.contains(j.doc||S.emptyDoc(),enviado);
+  // Sólo damos por sincronizado si el servidor de verdad tiene lo nuestro Y
+  // ella no escribió nada nuevo mientras el viaje estaba en curso.
+  sucio=!(S.contains(j.doc||S.emptyDoc(),enviado)&&escrituras===generacion);
   setSync(sucio?'espera':'guardado');
   if(sucio)scheduleSync(1500);
  }catch(e){

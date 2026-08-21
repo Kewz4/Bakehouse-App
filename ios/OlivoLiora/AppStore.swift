@@ -33,15 +33,25 @@ final class AppStore {
     private var pendingUpload = false      // hay cambios locales sin confirmar
     private var attempt = 0                // para la espera creciente entre reintentos
     private var isSyncing = false
+    /// Sube en cada escritura. Sirve para saber si ella escribió algo mientras
+    /// una subida estaba en curso.
+    private var writeGeneration = 0
     private var syncAgain = false
 
     init(doc: SyncDocument? = nil, startBackgroundWork: Bool = true) {
         self.doc = doc ?? LocalStore.load()
         guard startBackgroundWork else { return }
         monitor.onBecameOnline = { [weak self] in
-            self?.attempt = 0
-            self?.scheduleSync(after: .milliseconds(200))
-            self?.refreshFromServer()
+            guard let self else { return }
+            self.attempt = 0
+            guard self.cloudEnabled else {
+                // Arrancó sin señal: no llegó a saber si hay almacén. Ahora que
+                // hay internet, se vuelve a intentar el arranque completo.
+                Task { await self.boot() }
+                return
+            }
+            self.scheduleSync(after: .milliseconds(200))
+            self.refreshFromServer()
         }
         monitor.start()
         Task { await boot() }
@@ -109,6 +119,7 @@ final class AppStore {
         doc.updatedAt = MergeEngine.now()
         LocalStore.save(doc)
         pendingUpload = true
+        writeGeneration &+= 1
         syncState = cloudEnabled ? .saving : .localOnly
         scheduleSync(after: .milliseconds(400))
     }
@@ -156,6 +167,7 @@ final class AppStore {
 
         if pendingUpload { syncState = .saving }
         let sent = doc
+        let sentGeneration = writeGeneration
 
         do {
             let res = try await client.push(sent)
@@ -165,10 +177,12 @@ final class AppStore {
                 // mientras el viaje estaba en curso.
                 adopt(MergeEngine.merge(doc, remote))
                 // Sólo damos la subida por buena si el servidor de verdad tiene
-                // lo nuestro; si no, reintentamos.
-                pendingUpload = !MergeEngine.contains(remote, sent)
+                // lo nuestro Y ella no escribió nada nuevo durante el viaje.
+                let confirmed = MergeEngine.contains(remote, sent)
+                    && writeGeneration == sentGeneration
+                pendingUpload = !confirmed
             } else {
-                pendingUpload = false
+                pendingUpload = writeGeneration != sentGeneration
             }
             attempt = 0
             syncState = pendingUpload ? .waitingForNetwork : .saved
