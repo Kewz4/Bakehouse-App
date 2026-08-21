@@ -16,6 +16,9 @@ let package = Package(
         .testTarget(
             name: "OlivoLioraCoreTests",
             dependencies: ["OlivoLioraCore"],
-            resources: [.copy("merge-conformance.json")])
+            resources: [
+                .copy("merge-conformance.json"),
+                .copy("math-conformance.json")
+            ])
     ]
 )

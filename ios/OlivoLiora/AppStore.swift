@@ -29,6 +29,7 @@ final class AppStore {
 
     private var syncTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
+    private var periodicTask: Task<Void, Never>?
     private var pendingUpload = false      // hay cambios locales sin confirmar
     private var attempt = 0                // para la espera creciente entre reintentos
     private var isSyncing = false
@@ -204,9 +205,13 @@ final class AppStore {
 
     /// Cada 30 segundos mientras la app está abierta, para que lo que ella
     /// anote en la laptop aparezca en el teléfono sin tener que cerrarla.
+    ///
+    /// El bucle se guarda para poder cancelarlo: `boot()` puede volver a
+    /// llamarse (por ejemplo si la primera vez no había señal y luego sí), y sin
+    /// esto quedaría un bucle extra vivo por cada intento.
     private func startPeriodicRefresh() {
-        refreshTask?.cancel()
-        Task { [weak self] in
+        periodicTask?.cancel()
+        periodicTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(30))
                 guard let self else { return }

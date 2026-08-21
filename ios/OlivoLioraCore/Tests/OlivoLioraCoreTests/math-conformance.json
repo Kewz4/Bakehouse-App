@@ -1,0 +1,335 @@
+{
+  "parseQty": [
+    {
+      "in": "1",
+      "out": 1
+    },
+    {
+      "in": "2.5",
+      "out": 2.5
+    },
+    {
+      "in": "2,5",
+      "out": 2.5
+    },
+    {
+      "in": "0.5",
+      "out": 0.5
+    },
+    {
+      "in": "10",
+      "out": 10
+    },
+    {
+      "in": "1/2",
+      "out": 0.5
+    },
+    {
+      "in": "3/4",
+      "out": 0.75
+    },
+    {
+      "in": "1 1/2",
+      "out": 1.5
+    },
+    {
+      "in": "2 3/4",
+      "out": 2.75
+    },
+    {
+      "in": "5/8",
+      "out": 0.625
+    },
+    {
+      "in": "½",
+      "out": 0.5
+    },
+    {
+      "in": "¼",
+      "out": 0.25
+    },
+    {
+      "in": "¾",
+      "out": 0.75
+    },
+    {
+      "in": "⅓",
+      "out": 0.3333333333333333
+    },
+    {
+      "in": "⅔",
+      "out": 0.6666666666666666
+    },
+    {
+      "in": "⅛",
+      "out": 0.125
+    },
+    {
+      "in": "1 ½",
+      "out": 1.5
+    },
+    {
+      "in": "2 ¼",
+      "out": 2.25
+    },
+    {
+      "in": "3 ⅓",
+      "out": 3.3333333333333335
+    },
+    {
+      "in": "media",
+      "out": 0.5
+    },
+    {
+      "in": "medio",
+      "out": 0.5
+    },
+    {
+      "in": "mitad",
+      "out": 0.5
+    },
+    {
+      "in": "un cuarto",
+      "out": 0.25
+    },
+    {
+      "in": "dos tercios",
+      "out": 0.6666666666666666
+    },
+    {
+      "in": "tres cuartos",
+      "out": 0.75
+    },
+    {
+      "in": "una docena",
+      "out": 12
+    },
+    {
+      "in": "dos docenas",
+      "out": 24
+    },
+    {
+      "in": "un octavo",
+      "out": 0.125
+    },
+    {
+      "in": "media taza",
+      "out": 0.5
+    },
+    {
+      "in": "2 tazas",
+      "out": 2
+    },
+    {
+      "in": "1 1/2 libras",
+      "out": 1.5
+    },
+    {
+      "in": "",
+      "out": 0
+    },
+    {
+      "in": "   ",
+      "out": 0
+    },
+    {
+      "in": "nada",
+      "out": 0
+    },
+    {
+      "in": "abc",
+      "out": 0
+    }
+  ],
+  "prettyQty": [
+    {
+      "in": 0,
+      "out": "0"
+    },
+    {
+      "in": 0.125,
+      "out": "⅛"
+    },
+    {
+      "in": 0.25,
+      "out": "¼"
+    },
+    {
+      "in": 0.3333333333333333,
+      "out": "⅓"
+    },
+    {
+      "in": 0.5,
+      "out": "½"
+    },
+    {
+      "in": 0.6666666666666666,
+      "out": "⅔"
+    },
+    {
+      "in": 0.75,
+      "out": "¾"
+    },
+    {
+      "in": 1,
+      "out": "1"
+    },
+    {
+      "in": 1.25,
+      "out": "1 ¼"
+    },
+    {
+      "in": 1.5,
+      "out": "1 ½"
+    },
+    {
+      "in": 2,
+      "out": "2"
+    },
+    {
+      "in": 2.75,
+      "out": "2 ¾"
+    },
+    {
+      "in": 3.5,
+      "out": "3 ½"
+    },
+    {
+      "in": 12,
+      "out": "12"
+    },
+    {
+      "in": 0.3,
+      "out": "0.3"
+    },
+    {
+      "in": 1.07,
+      "out": "1.07"
+    }
+  ],
+  "baseCost": [
+    {
+      "in": {
+        "name": "Harina",
+        "quantity": 5,
+        "price": 6.5,
+        "unitSingle": "lb"
+      },
+      "out": 0.002866011746238911
+    },
+    {
+      "in": {
+        "name": "Azúcar",
+        "quantity": 2,
+        "price": 3,
+        "unitSingle": "kg"
+      },
+      "out": 0.0015
+    },
+    {
+      "in": {
+        "name": "Huevos",
+        "quantity": 12,
+        "price": 2.4,
+        "unitSingle": "u"
+      },
+      "out": 0.19999999999999998
+    },
+    {
+      "in": {
+        "name": "Leche",
+        "quantity": 1,
+        "price": 1.15,
+        "unitSingle": "l"
+      },
+      "out": 0.00115
+    },
+    {
+      "in": {
+        "name": "Vainilla",
+        "quantity": 60,
+        "price": 4.2,
+        "unitSingle": "ml"
+      },
+      "out": 0.07
+    },
+    {
+      "in": {
+        "name": "Raro",
+        "quantity": 0,
+        "price": 5,
+        "unitSingle": "g"
+      },
+      "out": 5
+    }
+  ],
+  "recipe": [
+    {
+      "in": {
+        "name": "Brownie",
+        "yield": 12,
+        "price": 2.5,
+        "ingredients": [
+          {
+            "qty": 500,
+            "cost": 0.0028
+          },
+          {
+            "qty": 3,
+            "cost": 0.2
+          }
+        ]
+      },
+      "totalCost": 2,
+      "unitCost": 0.16666666666666666,
+      "margin": 93.33333333333333,
+      "suggested": 0.4761904761904762
+    },
+    {
+      "in": {
+        "name": "Sin precio",
+        "yield": 8,
+        "price": 0,
+        "ingredients": [
+          {
+            "qty": 250,
+            "cost": 0.004
+          }
+        ]
+      },
+      "totalCost": 1,
+      "unitCost": 0.125,
+      "margin": 0,
+      "suggested": 0.35714285714285715
+    },
+    {
+      "in": {
+        "name": "Pierde plata",
+        "yield": 4,
+        "price": 0.5,
+        "ingredients": [
+          {
+            "qty": 1000,
+            "cost": 0.01
+          }
+        ]
+      },
+      "totalCost": 10,
+      "unitCost": 2.5,
+      "margin": -400,
+      "suggested": 7.142857142857143
+    },
+    {
+      "in": {
+        "name": "Sin ingredientes",
+        "yield": 1,
+        "price": 5,
+        "ingredients": []
+      },
+      "totalCost": 0,
+      "unitCost": 0,
+      "margin": 100,
+      "suggested": 0
+    }
+  ]
+}

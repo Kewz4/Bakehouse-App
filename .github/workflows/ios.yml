@@ -44,15 +44,16 @@ jobs:
           xcodebuild -version
           xcodebuild -showsdks | grep -i iphoneos || true
 
-      - name: Comprobar que el motor de combinación sigue igual al de la web
+      - name: Comprobar que Swift y la web siguen calculando igual
         run: |
           # Si alguien tocó sync-core.js y no regeneró los casos, esto lo caza
           # antes de que el teléfono y la laptop empiecen a discrepar.
           node test/make-conformance-fixtures.js
-          if ! git diff --quiet -- ios/OlivoLioraCore/Tests/OlivoLioraCoreTests/merge-conformance.json; then
+          node test/make-math-fixtures.js
+          if ! git diff --quiet -- ios/OlivoLioraCore/Tests/OlivoLioraCoreTests/; then
             echo "::error::Los casos de conformidad están desactualizados."
-            echo "Corre 'node test/make-conformance-fixtures.js' y súbelos."
-            git diff -- ios/OlivoLioraCore/Tests/OlivoLioraCoreTests/merge-conformance.json
+            echo "Corre 'node test/make-conformance-fixtures.js' y 'node test/make-math-fixtures.js' y súbelos."
+            git diff -- ios/OlivoLioraCore/Tests/OlivoLioraCoreTests/
             exit 1
           fi
 

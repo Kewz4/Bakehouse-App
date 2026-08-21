@@ -9,7 +9,8 @@
   "scripts": {
     "test": "node --test test/sync-core.test.js test/api-data.test.js",
     "test:e2e": "node --test --test-concurrency=1 test/two-devices.test.js",
-    "dev": "node test/dev-server.js 4321"
+    "dev": "node test/dev-server.js 4321",
+    "fixtures": "node test/make-conformance-fixtures.js && node test/make-math-fixtures.js"
   },
   "devDependencies": {
     "playwright": "^1.49.0"
