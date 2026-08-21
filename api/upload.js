@@ -7,11 +7,25 @@
  * Si no existe la variable BLOB_READ_WRITE_TOKEN (no hay Blob Store conectado),
  * responde enabled:false y la app guarda la foto dentro del dispositivo.
  */
+/**
+ * Busca el token del Blob Store.
+ *
+ * Normalmente Vercel lo llama `BLOB_READ_WRITE_TOKEN`, pero al conectar un
+ * store se le puede poner un prefijo y entonces queda como
+ * `MITIENDA_BLOB_READ_WRITE_TOKEN`. Aceptar cualquiera de las dos formas evita
+ * el caso más tonto de "está conectado y aun así dice que no".
+ */
+function blobToken() {
+  if (process.env.BLOB_READ_WRITE_TOKEN) return process.env.BLOB_READ_WRITE_TOKEN;
+  const key = Object.keys(process.env).find(k => k.endsWith('BLOB_READ_WRITE_TOKEN'));
+  return key ? process.env[key] : null;
+}
+
 const MAX_BYTES = 4 * 1024 * 1024; // 4 MB por foto
 const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
 
 module.exports = async function handler(req, res) {
-  const enabled = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  const enabled = Boolean(blobToken());
 
   if (req.method === 'GET') {
     res.setHeader('Cache-Control', 'no-store');
@@ -55,6 +69,7 @@ module.exports = async function handler(req, res) {
 
     const { put } = await import('@vercel/blob');
     const blob = await put(`postres/${safe}-${Date.now()}.${ext}`, buffer, {
+      token: blobToken(),
       access: 'public',
       contentType: mime,
       addRandomSuffix: true,

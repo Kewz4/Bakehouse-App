@@ -22,6 +22,20 @@
  */
 const Sync = require('../sync-core.js');
 
+/**
+ * Busca el token del Blob Store.
+ *
+ * Normalmente Vercel lo llama `BLOB_READ_WRITE_TOKEN`, pero al conectar un
+ * store se le puede poner un prefijo y entonces queda como
+ * `MITIENDA_BLOB_READ_WRITE_TOKEN`. Aceptar cualquiera de las dos formas evita
+ * el caso más tonto de "está conectado y aun así dice que no".
+ */
+function blobToken() {
+  if (process.env.BLOB_READ_WRITE_TOKEN) return process.env.BLOB_READ_WRITE_TOKEN;
+  const key = Object.keys(process.env).find(k => k.endsWith('BLOB_READ_WRITE_TOKEN'));
+  return key ? process.env[key] : null;
+}
+
 const PATHNAME = 'datos/olivo-liora.json';
 const MAX_BYTES = 4 * 1024 * 1024;
 
@@ -31,7 +45,7 @@ const WRITE_ATTEMPTS = 3;
 
 async function readDoc() {
   const { list } = await import('@vercel/blob');
-  const { blobs } = await list({ prefix: PATHNAME, limit: 1 });
+  const { blobs } = await list({ prefix: PATHNAME, limit: 1, token: blobToken() });
   if (!blobs.length) return Sync.emptyDoc();
 
   const r = await fetch(blobs[0].url + '?t=' + Date.now(), { cache: 'no-store' });
@@ -56,6 +70,7 @@ async function writeDoc(doc) {
   }
   const { put } = await import('@vercel/blob');
   await put(PATHNAME, payload, {
+    token: blobToken(),
     access: 'public',
     contentType: 'application/json',
     addRandomSuffix: false,
@@ -73,7 +88,7 @@ function parseBody(req) {
 }
 
 module.exports = async function handler(req, res) {
-  const enabled = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+  const enabled = Boolean(blobToken());
   res.setHeader('Cache-Control', 'no-store');
 
   // La app de iPhone habla con este mismo endpoint.
@@ -89,7 +104,11 @@ module.exports = async function handler(req, res) {
       enabled: false,
       doc: null,
       updatedAt: 0,
-      hint: 'Falta BLOB_READ_WRITE_TOKEN. Vercel -> Storage -> Blob -> Connect Project.'
+      hint: 'Falta BLOB_READ_WRITE_TOKEN. Vercel -> Storage -> Blob -> Connect Project.',
+      // Sólo los NOMBRES de las variables que mencionan BLOB, nunca sus valores.
+      // Sirve para distinguir "no está conectado" de "está conectado con otro
+      // nombre", que desde fuera se ven exactamente igual.
+      blobVars: Object.keys(process.env).filter(k => k.includes('BLOB'))
     });
   }
 
