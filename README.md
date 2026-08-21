@@ -15,35 +15,54 @@ Lo que se anota en una aparece en la otra sin tocar nada.
 
 **Hecho:**
 
-- Blob Store creado y conectado — `store_cFMIRAZHGAS7bOLQ`, público
-  (`https://cfmirazhgas7bolq.public.blob.vercel-storage.com`).
-- Repositorio conectado a Vercel.
-- Rama `main` creada con este código.
+- Este código está publicado en producción (`/sync-core.js` responde 200).
+- Repositorio conectado a Vercel; rama `main` creada con este código.
+- Blob Store creado y conectado al proyecto — `store_cFMIRAZHGAS7bOLQ`, público.
 
-**Falta comprobar una cosa:** que la *Production Branch* de Vercel apunte a una
-rama que tenga este código.
+**Falta una cosa, y es la última:** el proyecto tiene el store conectado pero
+**sin permiso de escritura**.
 
-Cuando se conectó el repositorio, la rama por defecto en GitHub era
-`claude/pwa-ios-sync-441csy`, así que lo más probable es que Vercel guardara esa
-como rama de producción. Ese ajuste no cambia solo aunque después se cree `main`.
+```bash
+curl -s https://olivo-liora.vercel.app/api/data
+# {"enabled":false, …, "blobVars":["BLOB_STORE_ID","BLOB_WEBHOOK_PUBLIC_KEY"]}
+```
 
-En Vercel, proyecto `olivo-liora` → *Settings* → *Git* → **Production Branch**:
-déjalo en `main` (recomendado) o en `claude/pwa-ios-sync-441csy`. Las dos tienen
-exactamente el mismo código.
+Esas dos variables demuestran que la conexión existe. La que falta es
+`BLOB_READ_WRITE_TOKEN`, que es la única que permite *guardar*. Sin ella se
+podría leer, pero no escribir, así que la app sigue en modo "guardado aquí".
+
+### Cómo arreglarlo
+
+**Opción A — reconectar con permiso de escritura**
+
+1. Vercel → **Storage** → tu Blob Store → pestaña de proyectos conectados.
+2. En `olivo-liora`, comprueba que esté como **Read and write**, no *Read only*.
+   Si está en solo lectura: desconecta y vuelve a conectar eligiendo lectura y
+   escritura.
+
+**Opción B — añadir la variable a mano** (siempre funciona)
+
+1. Vercel → **Storage** → tu Blob Store → sección de tokens / `.env.local`.
+   Copia el valor de `BLOB_READ_WRITE_TOKEN` (empieza por `vercel_blob_rw_…`).
+2. Proyecto `olivo-liora` → **Settings** → **Environment Variables** → añade
+   `BLOB_READ_WRITE_TOKEN` con ese valor, marcando *Production*, *Preview* y
+   *Development*.
+3. **Redespliega.** Añadir una variable no redespliega solo:
+   *Deployments* → el último → menú `⋯` → **Redeploy**.
+
+> Si al conectar el store le pusiste un prefijo y la variable quedó como
+> `ALGO_BLOB_READ_WRITE_TOKEN`, también sirve: el código acepta cualquier
+> variable cuyo nombre termine en `BLOB_READ_WRITE_TOKEN`.
 
 ### Comprobar que quedó
 
 ```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://olivo-liora.vercel.app/sync-core.js
-# 404 = todavía está la versión vieja     200 = ya está esta
-
 curl -s https://olivo-liora.vercel.app/api/data
-# {"enabled":false}  = falta BLOB_READ_WRITE_TOKEN en el proyecto
-# {"enabled":true,…} = sincronización encendida
+# {"enabled":true,"doc":{…},"updatedAt":…}
 ```
 
-Con las dos en verde: abre la web en la laptop y en el teléfono, anota una venta
-en uno y espera unos segundos. Aparece en el otro.
+Con eso en verde: abre la web en la laptop y en el teléfono, anota una venta en
+uno y espera unos segundos. Aparece en el otro.
 
 > Nota sobre el almacén público: el documento queda legible para cualquiera que
 > conozca su dirección
