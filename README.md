@@ -11,7 +11,12 @@ Lo que se anota en una aparece en la otra sin tocar nada.
 
 ---
 
-## ⚠️ Falta un paso, y sin él no se sincroniza nada
+## ⚠️ Faltan dos pasos, y sin ellos no se sincroniza nada
+
+Los dos hay que hacerlos desde tu cuenta de Vercel; ninguno se podía hacer
+desde aquí. El código ya está listo para los dos.
+
+### 1. Conectar un Blob Store
 
 Ahora mismo `https://olivo-liora.vercel.app/api/data` responde:
 
@@ -21,14 +26,8 @@ Ahora mismo `https://olivo-liora.vercel.app/api/data` responde:
 
 Eso significa que **el proyecto no tiene un Blob Store conectado**. Sin él no
 hay dónde guardar los datos compartidos, así que cada dispositivo se queda con
-su propia copia en el navegador y nunca se ven entre ellos. Es exactamente la
-razón por la que la laptop y el teléfono muestran cosas distintas.
-
-El código ya está listo para el momento en que exista. En cuanto aparezca la
-variable, la sincronización se enciende sola: no hay que volver a desplegar
-nada a mano ni cambiar una línea.
-
-**Cómo conectarlo** (una vez, ~30 segundos):
+su propia copia y nunca se ven entre ellos. Es exactamente la razón por la que
+la laptop y el teléfono muestran cosas distintas.
 
 1. Entra a <https://vercel.com/dashboard> con la cuenta donde vive el proyecto
    `olivo-liora`.
@@ -37,19 +36,45 @@ nada a mano ni cambiar una línea.
 4. En **Connect Project**, elige `olivo-liora` y conéctalo a *Production*,
    *Preview* y *Development*.
 
-Vercel añade `BLOB_READ_WRITE_TOKEN` y redespliega solo.
+Vercel añade `BLOB_READ_WRITE_TOKEN` y redespliega solo. En cuanto la variable
+exista, la sincronización se enciende sola: no hay que cambiar una línea.
 
-**Para comprobar que quedó:**
+### 2. Desplegar este código
+
+Lo que está publicado ahora mismo es la versión anterior, la del zip. Se puede
+comprobar: `https://olivo-liora.vercel.app/sync-core.js` responde **404**,
+porque ese archivo es nuevo.
+
+El repositorio de GitHub estaba vacío antes de este trabajo, así que el
+despliegue actual no salió de aquí (fue un `vercel deploy` desde tu máquina, o
+desde otro sitio). Hay que conectarlos, de una de estas dos formas:
+
+- **Conectar el repositorio** (recomendado, y así cada push despliega solo):
+  en Vercel, proyecto `olivo-liora` → *Settings* → *Git* → conecta
+  `Kewz4/Bakehouse-App`. Luego fusiona esta rama a `main`.
+- **O desplegar a mano** desde una copia de esta rama:
+  ```bash
+  git clone -b claude/pwa-ios-sync-441csy https://github.com/Kewz4/Bakehouse-App
+  cd Bakehouse-App && npx vercel --prod
+  ```
+
+### Comprobar que todo quedó
 
 ```bash
 curl -s https://olivo-liora.vercel.app/api/data
 # antes:   {"enabled":false, ...}
 # después: {"enabled":true,"doc":{...},"updatedAt":...}
+
+curl -s -o /dev/null -w "%{http_code}\n" https://olivo-liora.vercel.app/sync-core.js
+# antes: 404      después: 200
 ```
 
+Con esas dos cosas en verde, abre la web en la laptop y en el teléfono, anota
+una venta en uno y espera unos segundos: aparece en el otro.
+
 > El conector de Vercel de esta sesión sólo ve el team `OlivoLiora`, que está
-> vacío. El proyecto `olivo-liora` está en otra cuenta, así que este paso no se
-> podía hacer desde aquí.
+> vacío. El proyecto `olivo-liora` vive en otra cuenta, así que no se podía
+> tocar desde aquí.
 
 ---
 
