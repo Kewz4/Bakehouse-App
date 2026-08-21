@@ -2,8 +2,8 @@
    HTML: network-first (para que los cambios se vean al recargar)
    Resto de assets: cache-first
    /api y las fotos en Blob nunca se cachean. */
-const CACHE = 'olivo-liora-v4';
-const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest', './icon.svg',
+const CACHE = 'olivo-liora-v5';
+const ASSETS = ['./', './index.html', './styles.css', './sync-core.js', './app.js', './manifest.webmanifest', './icon.svg',
                 './icon-180.png', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', e => {

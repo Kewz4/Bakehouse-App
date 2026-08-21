@@ -1,75 +1,149 @@
 /**
- * Guardado automático de toda la información de la app.
+ * Olivo & Liora · almacén compartido
+ * ===================================
  *
- * GET  /api/data  -> { enabled, data, updatedAt }
- * PUT  /api/data  -> guarda el documento completo  -> { ok, updatedAt }
+ * GET  /api/data  -> { enabled, doc, updatedAt }
+ * PUT  /api/data  -> recibe un documento, lo COMBINA con el guardado y
+ *                    devuelve el resultado -> { enabled, ok, doc, updatedAt }
  *
- * Usa el almacenamiento de Vercel (Blob). Si no hay Blob Store conectado
- * responde enabled:false y la app sigue funcionando con lo guardado en el
- * teléfono, sin mostrarle nada raro a quien la usa.
+ * La diferencia importante con la versión anterior: el PUT ya no sobrescribe.
+ * Antes, el último dispositivo en escribir borraba el trabajo del otro. Ahora
+ * el servidor lee lo que hay, lo combina registro por registro (ver
+ * sync-core.js) y guarda el resultado. Dos dispositivos pueden escribir sin
+ * saber el uno del otro y no se pierde nada.
+ *
+ * Como respuesta siempre devolvemos el documento combinado completo, así el
+ * dispositivo que escribe recibe de vuelta, en el mismo viaje, lo que hizo el
+ * otro. Un solo round-trip hace subida y bajada.
+ *
+ * Si no hay Blob Store conectado (falta BLOB_READ_WRITE_TOKEN) respondemos
+ * enabled:false. La app sigue funcionando con lo guardado en el dispositivo y
+ * no le muestra nada raro a quien la usa.
  */
+const Sync = require('../sync-core.js');
+
 const PATHNAME = 'datos/olivo-liora.json';
 const MAX_BYTES = 4 * 1024 * 1024;
 
-async function blobUrl() {
+// Cuántas veces reintentamos leer-combinar-guardar si dos dispositivos
+// escriben en el mismo instante.
+const WRITE_ATTEMPTS = 3;
+
+async function readDoc() {
   const { list } = await import('@vercel/blob');
   const { blobs } = await list({ prefix: PATHNAME, limit: 1 });
-  return blobs.length ? blobs[0].url : null;
+  if (!blobs.length) return Sync.emptyDoc();
+
+  const r = await fetch(blobs[0].url + '?t=' + Date.now(), { cache: 'no-store' });
+  if (!r.ok) return Sync.emptyDoc();
+
+  try {
+    return Sync.normalizeDoc(await r.json());
+  } catch (e) {
+    // Un blob corrupto no debe tumbar la app: arrancamos de cero en memoria
+    // pero no lo sobrescribimos hasta que llegue una escritura real.
+    console.error('blob ilegible', e);
+    return Sync.emptyDoc();
+  }
+}
+
+async function writeDoc(doc) {
+  const payload = JSON.stringify(doc);
+  if (Buffer.byteLength(payload) > MAX_BYTES) {
+    const err = new Error('demasiado grande');
+    err.code = 'TOO_BIG';
+    throw err;
+  }
+  const { put } = await import('@vercel/blob');
+  await put(PATHNAME, payload, {
+    access: 'public',
+    contentType: 'application/json',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    cacheControlMaxAge: 0
+  });
+  return doc;
+}
+
+function parseBody(req) {
+  if (typeof req.body === 'string') {
+    try { return JSON.parse(req.body); } catch (e) { return null; }
+  }
+  return req.body && typeof req.body === 'object' ? req.body : null;
 }
 
 module.exports = async function handler(req, res) {
   const enabled = Boolean(process.env.BLOB_READ_WRITE_TOKEN);
   res.setHeader('Cache-Control', 'no-store');
 
+  // La app de iPhone habla con este mismo endpoint.
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+
   if (!enabled) {
-    if (req.method === 'GET') return res.status(200).json({ enabled: false });
-    return res.status(503).json({ enabled: false, error: 'Almacenamiento no configurado' });
+    // Sin almacén conectado. No es un error para la usuaria: la app guarda en
+    // el dispositivo. Devolvemos 200 para que el cliente no lo trate como caída.
+    return res.status(200).json({
+      enabled: false,
+      doc: null,
+      updatedAt: 0,
+      hint: 'Falta BLOB_READ_WRITE_TOKEN. Vercel -> Storage -> Blob -> Connect Project.'
+    });
   }
 
   try {
     if (req.method === 'GET') {
-      const url = await blobUrl();
-      if (!url) return res.status(200).json({ enabled: true, data: null, updatedAt: 0 });
-
-      const r = await fetch(url + '?t=' + Date.now(), { cache: 'no-store' });
-      if (!r.ok) return res.status(200).json({ enabled: true, data: null, updatedAt: 0 });
-
-      const doc = await r.json();
-      return res.status(200).json({ enabled: true, data: doc, updatedAt: doc.updatedAt || 0 });
+      const doc = await readDoc();
+      return res.status(200).json({ enabled: true, doc, updatedAt: doc.updatedAt || 0 });
     }
 
     if (req.method === 'PUT' || req.method === 'POST') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body || {};
-      if (!body || typeof body !== 'object' || !Array.isArray(body.recipes)) {
-        return res.status(400).json({ error: 'Datos inválidos' });
+      const body = parseBody(req);
+      if (!body) return res.status(400).json({ error: 'Cuerpo inválido' });
+
+      const incoming = Sync.normalizeDoc(body);
+      const now = Date.now();
+      let merged = null;
+      let lastErr = null;
+
+      for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
+        try {
+          const stored = await readDoc();
+          merged = Sync.mergeDocs(stored, incoming);
+          merged.updatedAt = now;
+          Sync.purgeTombstones(merged, now);
+          await writeDoc(merged);
+
+          // Releemos para confirmar que lo nuestro quedó. Si otro dispositivo
+          // escribió justo entre nuestro read y nuestro write, su versión pisó
+          // la nuestra: lo detectamos aquí y repetimos la combinación.
+          const verify = await readDoc();
+          if (Sync.contains(verify, incoming)) {
+            merged = verify;
+            break;
+          }
+          lastErr = new Error('carrera de escritura');
+        } catch (e) {
+          if (e && e.code === 'TOO_BIG') {
+            return res.status(413).json({ error: 'Demasiada información para guardar de una vez' });
+          }
+          lastErr = e;
+        }
       }
 
-      const doc = {
-        ingredients: body.ingredients || [],
-        recipes: body.recipes || [],
-        sales: body.sales || [],
-        expenses: body.expenses || [],
-        updatedAt: Date.now()
-      };
+      if (!merged) throw lastErr || new Error('no se pudo guardar');
 
-      const payload = JSON.stringify(doc);
-      if (Buffer.byteLength(payload) > MAX_BYTES) {
-        return res.status(413).json({ error: 'Demasiada información' });
-      }
-
-      const { put } = await import('@vercel/blob');
-      await put(PATHNAME, payload, {
-        access: 'public',
-        contentType: 'application/json',
-        addRandomSuffix: false,
-        allowOverwrite: true,
-        cacheControlMaxAge: 0
+      return res.status(200).json({
+        enabled: true,
+        ok: true,
+        doc: merged,
+        updatedAt: merged.updatedAt
       });
-
-      return res.status(200).json({ ok: true, updatedAt: doc.updatedAt });
     }
 
-    res.setHeader('Allow', 'GET, PUT');
+    res.setHeader('Allow', 'GET, PUT, POST, OPTIONS');
     return res.status(405).json({ error: 'Método no permitido' });
   } catch (err) {
     console.error('data error', err);

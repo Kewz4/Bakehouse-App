@@ -1,31 +1,132 @@
-const KEY='olivo-liora-data-v1';let data=JSON.parse(localStorage.getItem(KEY)||'{"ingredients":[],"recipes":[],"sales":[],"expenses":[]}');const $=s=>document.querySelector(s);const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0);// ---- Guardado automático ----
-// Se escribe primero en el teléfono (instantáneo) y enseguida se sincroniza
-// con el almacenamiento en la nube. La usuaria sólo ve "Guardando…" / "Guardado".
-let CLOUD=false, syncTimer=null, syncing=false, pendiente=false;
+const $=s=>document.querySelector(s);const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0);
+// ---------------------------------------------------------------------------
+// Guardado y sincronización
+// ---------------------------------------------------------------------------
+// Todo se escribe primero en el dispositivo (instantáneo) y enseguida se sube.
+// Si no hay internet, se queda esperando y sube solo cuando vuelve la señal.
+// Nunca se pierde nada y nunca hay que tocar ningún botón.
+//
+// `data` guarda lo que se ve. `graves` guarda las lápidas de lo borrado, que
+// viajan en la sincronización pero no se muestran (ver sync-core.js).
+const KEY='olivo-liora-data-v2';
+const LEGACY_KEY='olivo-liora-data-v1';
+const S=window.SyncCore;
+const COLS=S.COLLECTIONS;
+const vacio=()=>({ingredients:[],recipes:[],sales:[],expenses:[]});
+let data=vacio(),graves=vacio();
+let CLOUD=false,syncing=false,otraVez=false,syncTimer=null,pullTimer=null,intentos=0,sucio=false;
+
+// Documento completo tal como viaja por la red: lo vivo + las lápidas.
+function toWire(){const doc=S.emptyDoc();COLS.forEach(k=>{doc[k]=data[k].concat(graves[k])});doc.updatedAt=Date.now();return doc}
+// Al revés: separa lo que se muestra de lo que sólo sirve para sincronizar.
+function fromWire(doc){const d=S.normalizeDoc(doc);COLS.forEach(k=>{data[k]=d[k].filter(r=>!r.deleted);graves[k]=d[k].filter(r=>r.deleted)});ordenar()}
+function ordenar(){data.sales.sort((a,b)=>String(b.date).localeCompare(String(a.date)));data.expenses.sort((a,b)=>String(b.date).localeCompare(String(a.date)))}
+
+function loadLocal(){
+ let nuevo=null,viejo=null;
+ try{nuevo=JSON.parse(localStorage.getItem(KEY)||'null')}catch(e){}
+ try{viejo=JSON.parse(localStorage.getItem(LEGACY_KEY)||'null')}catch(e){}
+ const cuantos=d=>d?COLS.reduce((n,k)=>n+(Array.isArray(d[k])?d[k].length:0),0):0;
+ // Nos traemos lo de la versión anterior si todavía no hay documento nuevo, y
+ // también si el nuevo quedó vacío: eso pasa si la app alcanzó a guardar un
+ // documento en blanco antes de leer el viejo, y sin esto los datos de ella
+ // quedarían escondidos para siempre. Un documento vacío no tiene nada que
+ // perder, así que preferir el viejo siempre es seguro.
+ const raw=(cuantos(nuevo)===0&&cuantos(viejo)>0)?viejo:(nuevo||viejo||S.emptyDoc());
+ fromWire(raw||S.emptyDoc())}
+function saveLocal(){try{localStorage.setItem(KEY,JSON.stringify(toWire()));return true}
+ catch(e){toast('Tu teléfono se quedó sin espacio. Prueba borrando registros muy viejos.',true);return false}}
+
+// Lo único que ve la usuaria sobre la sincronización. Sin tecnicismos y sin
+// pedirle nada: o está guardado, o se está guardando, o se guardará solo.
 function setSync(estado){const el=document.getElementById('syncStatus');if(!el)return;
-const textos={guardando:'Guardando…',guardado:'Guardado',local:'Guardado en tu teléfono',error:'Se guardará al volver el internet'};
-el.textContent=textos[estado]||'';el.dataset.state=estado}
-const save=(msg)=>{data.updatedAt=Date.now();
-try{localStorage.setItem(KEY,JSON.stringify(data))}catch(e){toast('Tu teléfono se quedó sin espacio. Prueba borrando registros muy viejos.',true);return false}
-render();if(msg)toast(msg);setSync(CLOUD?'guardando':'local');scheduleSync();return true};
-function scheduleSync(){if(!CLOUD)return;clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,700)}
-async function syncNow(){if(!CLOUD)return;if(syncing){pendiente=true;return}
-syncing=true;setSync('guardando');
-try{const r=await fetch('api/data',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(data)});
-if(!r.ok)throw new Error('sync');const j=await r.json();data.updatedAt=j.updatedAt||data.updatedAt;
-localStorage.setItem(KEY,JSON.stringify(data));setSync('guardado')}
-catch(e){setSync('error')}
-finally{syncing=false;if(pendiente){pendiente=false;scheduleSync()}}}
-async function bootSync(){try{const r=await fetch('api/data',{cache:'no-store'});if(!r.ok)throw new Error('off');
-const j=await r.json();
-if(!j.enabled){CLOUD=false;setSync('local');return}
-CLOUD=true;
-const remoto=j.data,rt=+j.updatedAt||0,lt=+data.updatedAt||0;
-if(remoto&&rt>=lt){data={ingredients:remoto.ingredients||[],recipes:remoto.recipes||[],sales:remoto.sales||[],expenses:remoto.expenses||[],updatedAt:rt};
-localStorage.setItem(KEY,JSON.stringify(data));render();setSync('guardado')}
-else{await syncNow()}}
-catch(e){CLOUD=false;setSync('local')}}
-window.addEventListener('online',()=>{if(CLOUD)syncNow()});
+ const textos={guardando:'Guardando…',guardado:'Todo guardado',espera:'Se guardará solo',local:'Guardado aquí'};
+ el.textContent=textos[estado]||'';el.dataset.state=estado}
+
+// Marca un registro como modificado ahora mismo. De esto depende que, al
+// combinar, gane la versión más reciente.
+const sello=rec=>{rec.updatedAt=Date.now();rec.deleted=false;return rec};
+
+const save=(msg)=>{ordenar();if(!saveLocal())return false;
+ render();if(msg)toast(msg);
+ sucio=true;setSync(CLOUD?'guardando':'local');scheduleSync(400);return true};
+
+function scheduleSync(ms){if(!CLOUD)return;clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,ms==null?400:ms)}
+
+// Sube lo local y baja lo remoto en un solo viaje: el servidor combina y nos
+// devuelve el resultado ya unificado.
+async function syncNow(){
+ if(!CLOUD)return;
+ if(syncing){otraVez=true;return}
+ syncing=true;if(sucio)setSync('guardando');
+ const enviado=toWire();
+ try{
+  const r=await fetch('api/data',{method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify(enviado),cache:'no-store'});
+  if(!r.ok)throw new Error('http '+r.status);
+  const j=await r.json();
+  if(j.enabled===false){CLOUD=false;setSync('local');return}
+  if(j.doc){
+   // Combinamos otra vez contra lo local por si la usuaria escribió algo
+   // mientras el viaje estaba en curso.
+   fromWire(S.mergeDocs(toWire(),j.doc));
+   saveLocal();render()}
+  intentos=0;
+  // Sólo damos por sincronizado si el servidor de verdad tiene lo nuestro.
+  sucio=!S.contains(j.doc||S.emptyDoc(),enviado);
+  setSync(sucio?'espera':'guardado');
+  if(sucio)scheduleSync(1500);
+ }catch(e){
+  // Sin señal o servidor caído: lo local queda intacto y reintentamos con
+  // esperas cada vez más largas, hasta un minuto.
+  intentos++;setSync('espera');
+  scheduleSync(Math.min(60000,1000*Math.pow(2,Math.min(intentos,6))));
+ }finally{
+  syncing=false;
+  if(otraVez){otraVez=false;scheduleSync(300)}}}
+
+// Baja los cambios de los otros dispositivos sin subir nada.
+async function pull(){
+ if(!CLOUD||syncing)return;
+ try{
+  const r=await fetch('api/data',{cache:'no-store'});
+  if(!r.ok)return;
+  const j=await r.json();
+  if(j.enabled===false){CLOUD=false;setSync('local');return}
+  if(!j.doc)return;
+  const antes=S.canonical(toWire());
+  fromWire(S.mergeDocs(toWire(),j.doc));
+  const despues=S.canonical(toWire());
+  if(antes!==despues){saveLocal();render();if(!sucio)setSync('guardado')}
+ }catch(e){/* sin señal: da igual, lo intentamos luego */}}
+
+async function bootSync(){
+ loadLocal();render();
+ try{
+  const r=await fetch('api/data',{cache:'no-store'});
+  if(!r.ok)throw new Error('off');
+  const j=await r.json();
+  if(!j.enabled){CLOUD=false;setSync('local');return}
+  CLOUD=true;
+  if(j.doc){fromWire(S.mergeDocs(toWire(),j.doc));saveLocal();render()}
+  // Subimos de una lo que hubiera quedado pendiente de la última vez.
+  await syncNow();
+  arrancarVigilancia();
+ }catch(e){CLOUD=false;setSync('local');
+  // Puede que sólo sea que ahora no hay señal: si vuelve, reintentamos.
+  window.addEventListener('online',()=>{if(!CLOUD)bootSync()},{once:true})}}
+
+// Mantiene los dispositivos al día sin que nadie toque nada: al volver la
+// señal, al volver a la pestaña, y cada 30 segundos mientras está abierta.
+function arrancarVigilancia(){
+ clearInterval(pullTimer);
+ pullTimer=setInterval(()=>{if(document.visibilityState==='visible')pull()},30000);
+ document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pull();if(sucio)scheduleSync(200)}});
+ window.addEventListener('focus',()=>pull());
+ window.addEventListener('online',()=>{intentos=0;scheduleSync(200);pull()});
+ // Último intento de subir si cierra la pestaña con algo pendiente.
+ window.addEventListener('pagehide',()=>{
+  if(!CLOUD||!sucio||!navigator.sendBeacon)return;
+  try{navigator.sendBeacon('api/data',new Blob([JSON.stringify(toWire())],{type:'application/json'}))}catch(e){}});}
 // Unidades: cada una guarda a cuánto equivale en la unidad base de su familia
 // (masa → gramos, volumen → mililitros, conteo → unidades).
 const UNITS={
@@ -122,7 +223,7 @@ function fabAction(){({dashboard:openSale,recipes:openRecipe,sales:openSale,expe
 function nav(){document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));go((location.hash||'#dashboard').slice(1));window.addEventListener('hashchange',()=>go(location.hash.slice(1)))}
 function recipeCost(r){return (r.ingredients||[]).reduce((s,i)=>s+(+i.qty||0)*(+i.cost||0),0)}function recipePrice(r){return +r.price||0}function recipeUnitCost(r){return recipeCost(r)/(+r.yield||1)}function recipeMargin(r){const p=recipePrice(r);return p?(p-recipeUnitCost(r))/p*100:0}function suggestPrice(r,target=65){return recipeUnitCost(r)/(1-target/100)}function render(){const sales=data.sales.reduce((a,s)=>a+(+s.total||0),0),production=data.sales.reduce((a,s)=>{let r=data.recipes.find(x=>x.id===s.recipeId);return a+(r?recipeUnitCost(r)*(+s.qty||0):0)},0),expenses=data.expenses.reduce((a,e)=>a+(+e.amount||0),0),profit=sales-production-expenses;$('#mSales').textContent=money(sales);$('#mCost').textContent=money(production);$('#mExpenses').textContent=money(expenses);$('#mProfit').textContent=money(profit);$('#mMargin').textContent=sales?'Te quedan '+Math.round(profit/sales*100)+' centavos de cada dólar':'Aún sin ventas';renderRecipes();renderTables();renderChart(sales);renderAlerts()}
 function renderRecipes(){const q=(($('#recipeSearch')||{}).value||'').toLowerCase().trim();const list=data.recipes.filter(r=>!q||(r.name||'').toLowerCase().includes(q));const el=$('#recipesList');el.innerHTML=list.length?list.map(r=>{const c=recipeCost(r),u=recipeUnitCost(r),p=recipePrice(r),m=recipeMargin(r),cls=!p?'warn':m>=60?'ok':m>=45?'warn':'bad';return `<article class="recipe">${r.photo?`<img class="recipe-photo" src="${esc(r.photo)}" alt="${esc(r.name)}" loading="lazy">`:''}<span class="tag">${esc(r.yield)} porciones</span><h3>${esc(r.name)}</h3><small>${(r.ingredients||[]).length} ingredientes · costo por porción ${money(u)}</small><div class="recipe-data"><div><span>Costo total</span><b>${money(c)}</b></div><div><span>Precio / porción</span><b>${money(p)}</b></div></div><span class="badge ${cls}">${p?`Ganas ${m.toFixed(0)}% de cada venta`:'Falta ponerle precio'}</span>${p&&m<60?`<p class="helper">Cobrando <b>${money(suggestPrice(r))}</b> ganarías más</p>`:''}<div class="recipe-actions"><button onclick="openRecipe('${r.id}')">Editar</button><button onclick="duplicateRecipe('${r.id}')">Duplicar</button><button onclick="quickFromRecipe('${r.id}')">Calcular precio</button><button class="negative" onclick="removeItem('recipes','${r.id}')">Eliminar</button></div></article>`}).join(''):`<div class="empty">${q?'Ninguna receta coincide con tu búsqueda.':'Crea tu primer postre y calcula en un minuto cuánto cobrar.'}</div>`}
-function duplicateRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;data.recipes.push({...r,id:crypto.randomUUID(),name:r.name+' (copia)',ingredients:(r.ingredients||[]).map(i=>({...i}))});save('Receta duplicada')}
+function duplicateRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;data.recipes.push(sello({...r,id:crypto.randomUUID(),name:r.name+' (copia)',ingredients:(r.ingredients||[]).map(i=>({...i}))}));save('Receta duplicada')}
 function quickFromRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;go('recipes');$('#quickCost').value=recipeUnitCost(r).toFixed(2);quickCalc();$('#quickCost').scrollIntoView({behavior:'smooth',block:'center'});toast('Listo: costo de una porción de '+r.name)}
 function renderTables(){
 const qs=(($('#saleSearch')||{}).value||'').toLowerCase().trim();
@@ -157,7 +258,7 @@ function openIngredient(id){const g=data.ingredients.find(x=>x.id===id)||{name:'
 openModal(id?'Editar ingrediente':'Nuevo ingrediente',`<div class="form-grid">${field('Nombre','ingName','text',esc(g.name))}${field('¿Cómo lo compras?','ingUnit','text',esc(g.unit),'placeholder="ej. bolsa, caja, botella"')}${field('¿Cuánto trae?','ingQty','text',g.quantity!=null&&g.quantity!==''?prettyQty(g.quantity):'','readonly data-pad="1" placeholder="toca para escribir" onfocus="openPad(this)" onclick="openPad(this)"')}<div class="field"><label>¿En qué se mide?</label><select id="ingUnitSingle">${unitOptions(g.unitSingle||'g')}</select></div>${field('¿Cuánto te costó? ($)','ingPrice','number',g.price,'min="0" step="0.01" inputmode="decimal"')}</div><p class="helper">Ejemplo: compras una bolsa de harina de 5 libras por $6.50 → escribes “bolsa”, 5 y eliges “libras”. Después en tus recetas puedes usar gramos: la cuenta se hace sola.</p><div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="addIngredient('${id||''}')">Guardar ingrediente</button></div>`)}
 function addIngredient(id){const name=$('#ingName').value.trim(),unit=$('#ingUnit').value.trim(),quantity=parseQty($('#ingQty').value),price=+$('#ingPrice').value,unitSingle=$('#ingUnitSingle').value||'g';
 if(!name||!unit||!quantity||!(price>=0))return toast('Completa todos los campos.',true);
-const rec={id:id||crypto.randomUUID(),name,unit,quantity,price,unitSingle};
+const rec=sello({id:id||crypto.randomUUID(),name,unit,quantity,price,unitSingle});
 if(id)data.ingredients=data.ingredients.map(x=>x.id===id?rec:x);else data.ingredients.push(rec);
 save(id?'Ingrediente actualizado':'Ingrediente guardado');closeModal()}
 function ingredientLines(lines=[]){return `<div class="ingredients" id="ingredientsForm">${(lines.length?lines:[{}]).map(x=>ingredientLine(x)).join('')}</div><button class="btn alt" type="button" onclick="addLine()">+ Agregar ingrediente</button>`}
@@ -215,7 +316,7 @@ if(!name||!yieldN)return toast('Añade el nombre y cuántas porciones rinde.',tr
 const ingredients=[...document.querySelectorAll('.ingredient-line')].map(l=>{const sel=l.querySelector('[data-n=ingredientId]'),ing=data.ingredients.find(i=>i.id===(sel&&sel.value));const manual=l.querySelector('[data-n=name]');
 return{ingredientId:ing?ing.id:undefined,name:(ing&&ing.name)||(manual&&manual.value.trim())||l.dataset.name||'',qty:parseQty(l.querySelector('[data-n=qty]').value),unit:(l.querySelector('[data-n=unit]')||{}).value||'u',cost:+l.querySelector('[data-n=cost]').value||0}}).filter(x=>x.name&&x.qty>0);
 const photo=$('#photoPreview').dataset.value||'';
-const rec={id:id||crypto.randomUUID(),name,yield:yieldN,price,ingredients,photo};
+const rec=sello({id:id||crypto.randomUUID(),name,yield:yieldN,price,ingredients,photo});
 if(id)data.recipes=data.recipes.map(x=>x.id===id?rec:x);else data.recipes.push(rec);
 save(id?'Receta actualizada':'Receta guardada');closeModal()}
 function openSale(id){const v=data.sales.find(x=>x.id===id)||{date:new Date().toISOString().slice(0,10),product:'',qty:1,total:'',recipeId:''};
@@ -227,7 +328,7 @@ const sugerido=recipePrice(r)*qty;if(fromSelect||!$('#sTotal').value)if(sugerido
 hint.textContent=`Con tu precio serían ${money(sugerido)} · hacerlos te cuesta unos ${money(recipeUnitCost(r)*qty)}`}
 function addSale(id){const product=$('#sProduct').value.trim(),total=+$('#sTotal').value,qty=parseQty($('#sQty').value),recipeId=$('#sRecipe').value,date=$('#sDate').value;
 if(!product||!(total>0)||!(qty>0))return toast('Completa producto, cantidad y total.',true);
-const rec={id:id||crypto.randomUUID(),date,product,total,qty,recipeId};
+const rec=sello({id:id||crypto.randomUUID(),date,product,total,qty,recipeId});
 if(id)data.sales=data.sales.map(x=>x.id===id?rec:x);else data.sales.unshift(rec);
 data.sales.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
 save(id?'Venta actualizada':'Venta registrada');closeModal()}
@@ -236,11 +337,15 @@ const cats=['Servicios','Transporte','Empaque','Ingredientes','Marketing','Mano 
 openModal(id?'Editar gasto':'Registrar gasto',`<div class="form-grid">${field('Fecha','eDate','date',g.date)}${field('Concepto','eName','text',esc(g.name),'placeholder="ej. Gas para horno"')}<div class="field"><label>Categoría</label><select id="eCategory">${cats.map(c=>`<option ${g.category===c?'selected':''}>${c}</option>`).join('')}</select></div>${field('Monto ($)','eAmount','number',g.amount,'min="0" step="0.01" inputmode="decimal"')}</div><div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="addExpense('${id||''}')">Guardar gasto</button></div>`)}
 function addExpense(id){const name=$('#eName').value.trim(),amount=+$('#eAmount').value;
 if(!name||!(amount>0))return toast('Completa el concepto y el monto.',true);
-const rec={id:id||crypto.randomUUID(),date:$('#eDate').value,name,category:$('#eCategory').value,amount};
+const rec=sello({id:id||crypto.randomUUID(),date:$('#eDate').value,name,category:$('#eCategory').value,amount});
 if(id)data.expenses=data.expenses.map(x=>x.id===id?rec:x);else data.expenses.unshift(rec);
 data.expenses.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
 save(id?'Gasto actualizado':'Gasto registrado');closeModal()}
-function removeItem(type,id){if(!confirm('¿Borrar esto? No se puede deshacer.'))return;data[type]=data[type].filter(x=>x.id!==id);save('Registro eliminado')}
+function removeItem(type,id){if(!confirm('¿Borrar esto? No se puede deshacer.'))return;
+data[type]=data[type].filter(x=>x.id!==id);
+// La lápida es lo que impide que el registro reaparezca desde el otro dispositivo.
+graves[type]=graves[type].filter(x=>x.id!==id).concat([S.tombstone(id)]);
+save('Registro eliminado')}
 let calcMode='margin';
 function setCalcMode(m){calcMode=m;document.querySelectorAll('#calcMode button').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
 $('#quickPctLabel').textContent=m==='margin'?'De cada venta quiero ganar (%)':'Al costo le sumo (%)';
@@ -290,6 +395,7 @@ return{start,end,label:sel?sel.textContent:''}}
 render=function(){const{start,end,label}=periodRange();const all={sales:data.sales,expenses:data.expenses};window.ALLDATA=all;
 const inRange=d=>{const t=new Date(String(d).length<=10?String(d)+'T12:00:00':d);return !isNaN(t)&&t>=start&&t<=end};
 data.sales=all.sales.filter(x=>inRange(x.date));data.expenses=all.expenses.filter(x=>inRange(x.date));
+try{
 baseRender();
 const total=data.sales.reduce((a,x)=>a+(+x.total||0),0);
 const ticket=data.sales.length?total/data.sales.length:0;
@@ -303,5 +409,5 @@ $('#stats').innerHTML=`<div class="row"><span class="dot"></span><div class="gro
 renderTopProducts();
 const profitEl=$('#mProfit');const profit=total-data.sales.reduce((a,x)=>{const r=data.recipes.find(y=>y.id===x.recipeId);return a+(r?recipeUnitCost(r)*(+x.qty||0):0)},0)-data.expenses.reduce((a,x)=>a+(+x.amount||0),0);
 profitEl.style.color=profit<0?'var(--red)':'var(--ink)';$('#mMargin').className=profit<0?'':'';$('#mMargin').style.color=profit<0?'var(--red)':'';
-data.sales=all.sales;data.expenses=all.expenses};
-nav();render();setCalcMode('margin');bootSync();
+}finally{data.sales=all.sales;data.expenses=all.expenses}};
+loadLocal();nav();render();setCalcMode('margin');bootSync();
