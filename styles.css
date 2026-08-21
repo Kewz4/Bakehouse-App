@@ -166,3 +166,17 @@ input[data-pad]:focus{border-color:var(--green);box-shadow:0 0 0 3px #365b4c26}
 body.pad-open .fab{display:none!important}
 body.pad-open .tabbar{opacity:0;pointer-events:none}
 @media(min-width:821px){.pad{left:auto;right:24px;bottom:24px;width:340px;border-radius:20px}}
+
+    /* ===== Información nutricional (opcional) ===== */
+    /* Va dentro de un <details> cerrado: quien no la use no la ve, y quien la
+       use la abre una vez. Así el formulario sigue siendo corto. */
+    .macros{margin-top:16px;border:1px solid var(--line);border-radius:14px;background:#fff;padding:0 14px}
+    .macros>summary{cursor:pointer;padding:14px 0;font-weight:750;color:var(--ink);list-style:none;display:flex;align-items:center;gap:8px}
+    .macros>summary::-webkit-details-marker{display:none}
+    .macros>summary::before{content:"▸";color:var(--muted);font-size:13px;transition:transform .15s}
+    .macros[open]>summary::before{transform:rotate(90deg)}
+    .macros>summary .opt{font-weight:600;font-size:11px;color:var(--muted);background:#f2efe6;padding:3px 7px;border-radius:6px;text-transform:uppercase;letter-spacing:.6px}
+    .macros>*:last-child{margin-bottom:14px}
+    .scan-row{display:flex;gap:8px;flex-wrap:wrap;margin:4px 0 2px}
+    .macro-line{margin:8px 0 0;font-size:12px;font-weight:700;color:var(--green);background:#eef4ea;padding:7px 10px;border-radius:9px;line-height:1.35}
+    @media(max-width:760px){.macros .form-grid{grid-template-columns:1fr 1fr}}

@@ -78,8 +78,98 @@ function baseCost(ing){const q=(+ing.quantity||1)*unitInfo(ing.unitSingle).f;ret
 
 function recipeCost(r){return (r.ingredients||[]).reduce((s,i)=>s+(+i.qty||0)*(+i.cost||0),0)}function recipePrice(r){return +r.price||0}function recipeUnitCost(r){return recipeCost(r)/(+r.yield||1)}function recipeMargin(r){const p=recipePrice(r);return p?(p-recipeUnitCost(r))/p*100:0}function suggestPrice(r,target=65){return recipeUnitCost(r)/(1-target/100)}
 
+// ---------------------------------------------------------------------------
+// Macros (opcional)
+// ---------------------------------------------------------------------------
+// Se guardan POR 100 UNIDADES BASE del ingrediente: por 100 g si se mide en
+// masa, por 100 ml si en volumen, por 100 unidades si se cuenta. Es la misma
+// forma en que vienen las etiquetas, así que lo que se lee de una foto entra
+// tal cual, sin conversiones que se puedan torcer.
+//
+// El sodio va en miligramos; todo lo demás en gramos, salvo las calorías.
+const MACROS=[
+ {k:'calorias',      n:'Calorías',        u:'kcal'},
+ {k:'proteina',      n:'Proteína',        u:'g'},
+ {k:'carbohidratos', n:'Carbohidratos',   u:'g'},
+ {k:'azucar',        n:'Azúcares',        u:'g'},
+ {k:'grasa',         n:'Grasa',           u:'g'},
+ {k:'grasaSaturada', n:'Grasa saturada',  u:'g'},
+ {k:'fibra',         n:'Fibra',           u:'g'},
+ {k:'sodioMg',       n:'Sodio',           u:'mg'}];
+const MACRO_KEYS=MACROS.map(m=>m.k);
+
+// ¿Este ingrediente tiene datos de macros? Son opcionales: la mayoría de las
+// recetas funcionan sin ellos.
+function hasMacros(ing){const m=ing&&ing.macros;
+ return !!m&&MACRO_KEYS.some(k=>m[k]!=null&&m[k]!==''&&isFinite(+m[k]))}
+
+// Cuánto aporta 1 unidad base (1 g, 1 ml, 1 unidad) del ingrediente.
+function macroPerBase(ing,key){const m=(ing&&ing.macros)||{};const v=+m[key];
+ return isFinite(v)?v/100:0}
+
+/**
+ * Suma los macros de una receta.
+ *
+ * Sólo cuentan las líneas enlazadas a un ingrediente que tenga macros. Se
+ * devuelve además cuántas líneas se pudieron contar: si faltan, mostrar un
+ * total a secas sería engañoso, y la interfaz lo advierte en vez de callar.
+ */
+function recipeMacros(r,ingredientsById){
+ const totals={};MACRO_KEYS.forEach(k=>totals[k]=0);
+ const lines=(r&&r.ingredients)||[];
+ let contadas=0;
+ lines.forEach(l=>{
+  const ing=ingredientsById&&ingredientsById[l.ingredientId];
+  if(!ing||!hasMacros(ing))return;
+  // cantidad de la línea llevada a unidades base
+  const base=(+l.qty||0)*unitInfo(l.unit||ing.unitSingle).f;
+  MACRO_KEYS.forEach(k=>{totals[k]+=base*macroPerBase(ing,k)});
+  contadas++});
+ const porciones=(+r.yield||1)||1;
+ const perServing={};MACRO_KEYS.forEach(k=>perServing[k]=totals[k]/porciones);
+ return {totals:totals, perServing:perServing,
+         contadas:contadas, total:lines.length, completo:contadas===lines.length&&lines.length>0};
+}
+
+/**
+ * Convierte lo leído de una etiqueta a "por 100 unidades base".
+ *
+ * El modelo de visión copia los números tal cual los ve y dice a qué se
+ * refieren; la cuenta se hace aquí, en código, porque una división mal hecha
+ * por el modelo se vería igual de convincente que una bien hecha.
+ *
+ * `paquete` (opcional) es {cantidad, unitSingle}: si la etiqueta no dice cuánto
+ * pesa una porción pero sí cuántas porciones trae el envase, se deduce.
+ */
+function normalizarEtiqueta(lectura,paquete){
+ if(!lectura||!lectura.encontrado)return {ok:false,motivo:'sin-tabla'};
+ const v=lectura.valores||{};
+ const tieneAlgo=MACRO_KEYS.some(k=>v[k]!=null&&isFinite(+v[k]));
+ if(!tieneAlgo)return {ok:false,motivo:'sin-datos'};
+
+ let porcion=+lectura.porcionGramos||0;
+ // Si no dice el tamaño de la porción pero sí cuántas trae el envase, y
+ // sabemos cuánto trae el envase, sale por división.
+ if(!porcion&&paquete&&+lectura.porcionesPorEnvase>0){
+  const base=(+paquete.cantidad||0)*unitInfo(paquete.unitSingle).f;
+  if(base>0)porcion=base/(+lectura.porcionesPorEnvase)}
+
+ let factor;
+ if(lectura.base==='100g')factor=1;                 // ya viene por 100
+ else if(porcion>0)factor=100/porcion;              // por porción -> por 100
+ else return {ok:false,motivo:'sin-porcion'};
+
+ const macros={};
+ MACRO_KEYS.forEach(k=>{const n=+v[k];
+  macros[k]=(v[k]==null||!isFinite(n))?null:+(n*factor).toFixed(2)});
+ return {ok:true,macros:macros,confianza:lectura.confianza||'media'};
+}
+
 return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS,
         parseQty:parseQty, prettyQty:prettyQty, unitFamily:unitFamily, baseCost:baseCost,
         recipeCost:recipeCost, recipePrice:recipePrice, recipeUnitCost:recipeUnitCost,
-        recipeMargin:recipeMargin, suggestPrice:suggestPrice};
+        recipeMargin:recipeMargin, suggestPrice:suggestPrice,
+        MACROS:MACROS, MACRO_KEYS:MACRO_KEYS, hasMacros:hasMacros,
+        macroPerBase:macroPerBase, recipeMacros:recipeMacros,
+        normalizarEtiqueta:normalizarEtiqueta};
 });

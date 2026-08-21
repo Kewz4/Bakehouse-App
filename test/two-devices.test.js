@@ -249,3 +249,96 @@ test('una foto tomada sin señal se sube sola y deja de abultar el documento', a
     assert.deepEqual(phone.errors, []);
   } finally { await phone.close(); }
 });
+
+// --- Macros -----------------------------------------------------------------
+
+test('los macros de un ingrediente se guardan y viajan al otro dispositivo', async () => {
+  const phone = await device();
+  const laptop = await device();
+  try {
+    await phone.page.evaluate(() => openIngredient());
+    await phone.page.fill('#ingName', 'Harina');
+    await phone.page.fill('#ingUnit', 'bolsa');
+    await phone.page.evaluate(() => { document.querySelector('#ingQty').value = '5'; });
+    await phone.page.selectOption('#ingUnitSingle', 'lb');
+    await phone.page.fill('#ingPrice', '6.50');
+    await phone.page.click('.macros > summary');
+    await phone.page.fill('#mac_calorias', '380');
+    await phone.page.fill('#mac_proteina', '11');
+    await phone.page.evaluate(() => addIngredient(''));
+    await esperarSync(phone.page);
+
+    await laptop.page.evaluate(() => pull());
+    await laptop.page.waitForFunction(
+      () => data.ingredients.length === 1, null, { timeout: 10000 });
+
+    const m = await laptop.page.evaluate(() => data.ingredients[0].macros);
+    assert.equal(m.calorias, 380);
+    assert.equal(m.proteina, 11);
+    // Lo que no se escribió queda en null, no en 0.
+    assert.equal(m.grasa, null);
+    assert.deepEqual(phone.errors, []);
+  } finally { await phone.close(); await laptop.close(); }
+});
+
+test('un ingrediente sin macros no guarda un objeto vacío', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => openIngredient());
+    await d.page.fill('#ingName', 'Sal');
+    await d.page.fill('#ingUnit', 'bolsa');
+    await d.page.evaluate(() => { document.querySelector('#ingQty').value = '1'; });
+    await d.page.fill('#ingPrice', '1');
+    await d.page.evaluate(() => addIngredient(''));
+    const m = await d.page.evaluate(() => data.ingredients[0].macros);
+    assert.equal(m, null, 'sin datos nutricionales, macros debe ser null');
+  } finally { await d.close(); }
+});
+
+test('la cámara lee una etiqueta y llena los campos sola', async () => {
+  const d = await device();
+  try {
+    await d.page.waitForFunction(() => VISION === true, null, { timeout: 10000 });
+    await d.page.evaluate(() => openIngredient());
+    await d.page.click('.macros > summary');
+    // Se simula la foto entregando un archivo al input, como haría la cámara.
+    await d.page.setInputFiles('#macFile', {
+      name: 'etiqueta.png', mimeType: 'image/png',
+      buffer: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64')
+    });
+    await d.page.waitForFunction(
+      () => document.querySelector('#mac_calorias').value === '380',
+      null, { timeout: 15000 });
+
+    assert.equal(await d.page.inputValue('#mac_proteina'), '11');
+    assert.equal(await d.page.inputValue('#mac_sodioMg'), '400');
+    const hint = await d.page.textContent('#scanHint');
+    assert.ok(/8 datos/.test(hint), 'debe decir cuántos datos llenó: ' + hint);
+    assert.deepEqual(d.errors, []);
+  } finally { await d.close(); }
+});
+
+test('la receta muestra los macros por porción y avisa si faltan ingredientes', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => {
+      data.ingredients.push(sello({ id: 'h', name: 'Harina', unit: 'bolsa',
+        quantity: 1, price: 1, unitSingle: 'kg',
+        macros: { calorias: 380, proteina: 11, azucar: 1.5, grasa: 1.2 } }));
+      data.ingredients.push(sello({ id: 'x', name: 'Huevos', unit: 'caja',
+        quantity: 12, price: 2, unitSingle: 'u', macros: null }));
+      data.recipes.push(sello({ id: 'r', name: 'Pan', yield: 10, price: 2,
+        ingredients: [{ ingredientId: 'h', qty: 500, unit: 'g', cost: 0 },
+                      { ingredientId: 'x', qty: 2, unit: 'u', cost: 0 }] }));
+      save();
+      go('recipes');
+    });
+    await d.page.waitForSelector('.macro-line', { timeout: 10000 });
+    const line = await d.page.textContent('.macro-line');
+    // 500 g a 380 kcal/100 g = 1900 kcal, entre 10 porciones = 190
+    assert.ok(/190 kcal/.test(line), 'kcal por porción: ' + line);
+    assert.ok(/1 de 2 ingredientes/.test(line), 'debe avisar de la cobertura: ' + line);
+  } finally { await d.close(); }
+});

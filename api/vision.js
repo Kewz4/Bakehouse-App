@@ -1,0 +1,218 @@
+/**
+ * Olivo & Liora · leer una etiqueta nutricional con la cámara
+ * ============================================================
+ *
+ * GET  /api/vision  -> { enabled }               (la app pregunta al abrir)
+ * POST /api/vision  -> { dataUrl, paquete? }     -> { ok, macros, confianza }
+ *
+ * Ella toma una foto de la tabla nutricional y los campos se llenan solos.
+ *
+ * ---------------------------------------------------------------------------
+ * POR QUÉ PASA POR EL SERVIDOR
+ * ---------------------------------------------------------------------------
+ * La llave de Groq vive aquí, en una variable de entorno, y nunca sale hacia el
+ * teléfono ni hacia el navegador. Si estuviera dentro de app.js cualquiera que
+ * abriera la página podría leerla, y el repositorio es público.
+ *
+ * ---------------------------------------------------------------------------
+ * CÓMO SE REPARTE EL TRABAJO
+ * ---------------------------------------------------------------------------
+ * El modelo SÓLO copia lo que ve y dice a qué se refiere la tabla ("por
+ * porción" o "por 100 g"). Las cuentas — pasar de porción a 100 g — se hacen en
+ * código, en business-core.js.
+ *
+ * Es a propósito: un modelo que divide mal produce un número igual de
+ * convincente que uno bien calculado, y aquí un error se convierte en un precio
+ * mal puesto. Copiar es lo que hace bien; dividir lo hace bien el código.
+ */
+const B = require('../business-core.js');
+
+const MODEL = 'qwen/qwen3.6-27b';
+const ENDPOINT = 'https://api.groq.com/openai/v1/chat/completions';
+const MAX_BYTES = 4 * 1024 * 1024;
+const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+const TIMEOUT_MS = 45000;
+
+function groqKey() {
+  return process.env.GROQ_API_KEY || process.env.GROQ_KEY || null;
+}
+
+// Se obliga al modelo a responder con esta forma exacta. Así no hay que
+// adivinar nada al leer la respuesta.
+const SCHEMA = {
+  type: 'object',
+  properties: {
+    encontrado: { type: 'boolean' },
+    base: { type: 'string', enum: ['porcion', '100g', 'desconocido'] },
+    porcionGramos: { type: ['number', 'null'] },
+    porcionesPorEnvase: { type: ['number', 'null'] },
+    valores: {
+      type: 'object',
+      properties: {
+        calorias: { type: ['number', 'null'] },
+        proteina: { type: ['number', 'null'] },
+        carbohidratos: { type: ['number', 'null'] },
+        azucar: { type: ['number', 'null'] },
+        grasa: { type: ['number', 'null'] },
+        grasaSaturada: { type: ['number', 'null'] },
+        fibra: { type: ['number', 'null'] },
+        sodioMg: { type: ['number', 'null'] }
+      },
+      required: ['calorias', 'proteina', 'carbohidratos', 'azucar',
+                 'grasa', 'grasaSaturada', 'fibra', 'sodioMg']
+    },
+    confianza: { type: 'string', enum: ['alta', 'media', 'baja'] }
+  },
+  required: ['encontrado', 'base', 'porcionGramos', 'porcionesPorEnvase', 'valores', 'confianza']
+};
+
+const PROMPT = [
+  'Eres un extractor de tablas nutricionales. Lee la etiqueta de la foto.',
+  '',
+  'Reglas:',
+  '- Copia los números EXACTAMENTE como aparecen. No conviertas, no calcules,',
+  '  no redondees y no completes lo que falte.',
+  '- "base" es a qué se refieren los números de la tabla: "porcion" si dice',
+  '  "por porción" o "cantidad por porción"; "100g" si la tabla es por 100 g',
+  '  o por 100 ml.',
+  '- "porcionGramos": el tamaño de una porción en gramos (o ml). null si no',
+  '  aparece. Si dice "1 taza (30 g)", son 30.',
+  '- "porcionesPorEnvase": cuántas porciones trae el paquete. null si no aparece.',
+  '- Los gramos en gramos. El sodio SIEMPRE en miligramos: si la etiqueta lo da',
+  '  en gramos, multiplica por 1000 (esta es la única conversión permitida).',
+  '- Si un dato no aparece en la etiqueta, pon null. Nunca lo inventes ni lo',
+  '  deduzcas de otro producto parecido.',
+  '- "confianza": "alta" si la foto se lee sin esfuerzo; "baja" si está borrosa,',
+  '  cortada o en ángulo.',
+  '- Si la foto no es una tabla nutricional, encontrado=false y todo en null.'
+].join('\n');
+
+async function askGroq(mime, base64, signal) {
+  const res = await fetch(ENDPOINT, {
+    method: 'POST',
+    signal,
+    headers: {
+      Authorization: 'Bearer ' + groqKey(),
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      temperature: 0,
+      messages: [
+        { role: 'system', content: PROMPT },
+        {
+          role: 'user',
+          content: [
+            { type: 'text', text: 'Extrae la tabla nutricional de esta etiqueta.' },
+            { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } }
+          ]
+        }
+      ],
+      response_format: { type: 'json_schema', json_schema: { name: 'nutricion', schema: SCHEMA } }
+    })
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    const err = new Error('groq ' + res.status);
+    err.status = res.status;
+    err.detail = detail.slice(0, 300);
+    throw err;
+  }
+
+  const json = await res.json();
+  const text = json && json.choices && json.choices[0] &&
+               json.choices[0].message && json.choices[0].message.content;
+  if (!text) throw new Error('respuesta vacía');
+  return JSON.parse(text);
+}
+
+function parseBody(req) {
+  if (typeof req.body === 'string') {
+    try { return JSON.parse(req.body); } catch (e) { return null; }
+  }
+  return req.body && typeof req.body === 'object' ? req.body : null;
+}
+
+// Mensajes para ella: qué hacer, nunca por qué falló por dentro.
+const MOTIVOS = {
+  'sin-tabla':   'Esa foto no parece una tabla nutricional. Enfoca la parte donde dicen las calorías.',
+  'sin-datos':   'No alcancé a leer los números. Prueba de nuevo con más luz y de frente.',
+  'sin-porcion': 'La etiqueta no dice cuánto pesa una porción, así que no puedo pasarlo a 100 g. Puedes escribirlos a mano.',
+  'error':       'No pude leer la etiqueta ahora. Puedes escribir los datos a mano.'
+};
+
+module.exports = async function handler(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'content-type');
+  if (req.method === 'OPTIONS') return res.status(204).end();
+
+  const enabled = Boolean(groqKey());
+
+  if (req.method === 'GET') {
+    // La interfaz esconde el botón de la cámara si esto viene en false, para no
+    // ofrecerle algo que no va a funcionar.
+    return res.status(200).json({
+      enabled,
+      hint: enabled ? undefined : 'Falta GROQ_API_KEY en las variables del proyecto.'
+    });
+  }
+
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', 'GET, POST, OPTIONS');
+    return res.status(405).json({ ok: false, error: 'Método no permitido' });
+  }
+
+  if (!enabled) {
+    return res.status(200).json({ ok: false, enabled: false, motivo: 'apagado',
+      mensaje: 'Puedes escribir los datos a mano.' });
+  }
+
+  const body = parseBody(req);
+  const dataUrl = body && body.dataUrl;
+  if (!dataUrl || typeof dataUrl !== 'string') {
+    return res.status(400).json({ ok: false, error: 'Falta la imagen' });
+  }
+
+  const match = dataUrl.match(/^data:([\w/+.-]+);base64,(.+)$/);
+  if (!match) return res.status(400).json({ ok: false, error: 'Formato de imagen inválido' });
+
+  const [, mime, base64] = match;
+  if (!ALLOWED.includes(mime)) {
+    return res.status(415).json({ ok: false, error: 'Tipo de imagen no permitido' });
+  }
+  if (Buffer.byteLength(base64, 'base64') > MAX_BYTES) {
+    return res.status(413).json({ ok: false, error: 'La foto es demasiado grande' });
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+  try {
+    const lectura = await askGroq(mime, base64, controller.signal);
+    const normalizado = B.normalizarEtiqueta(lectura, body.paquete);
+
+    if (!normalizado.ok) {
+      return res.status(200).json({
+        ok: false,
+        motivo: normalizado.motivo,
+        mensaje: MOTIVOS[normalizado.motivo] || MOTIVOS.error
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      macros: normalizado.macros,
+      confianza: normalizado.confianza,
+      // Se devuelve para que la interfaz pueda decir "por 100 g" con seguridad.
+      porcionGramos: lectura.porcionGramos || null
+    });
+  } catch (err) {
+    console.error('vision error', err && err.status, err && (err.detail || err.message));
+    return res.status(200).json({ ok: false, motivo: 'error', mensaje: MOTIVOS.error });
+  } finally {
+    clearTimeout(timer);
+  }
+};

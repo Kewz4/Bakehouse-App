@@ -26,7 +26,7 @@ const TYPES = {
 function createServer(options) {
   const opts = options || {};
   // `enabled:false` simula un despliegue sin Blob Store conectado.
-  const state = { doc: Sync.emptyDoc(), enabled: opts.enabled !== false, writes: 0, uploads: 0 };
+  const state = { doc: Sync.emptyDoc(), enabled: opts.enabled !== false, writes: 0, uploads: 0, scans: 0 };
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -85,6 +85,29 @@ function createServer(options) {
         state.uploads++;
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ url: 'https://blob.test.local/postres/foto-' + state.uploads + '.jpg' }));
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/vision') {
+      res.setHeader('Cache-Control', 'no-store');
+      const on = opts.vision !== false;
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ enabled: on }));
+      }
+      let body = '';
+      req.on('data', c => { body += c; });
+      req.on('end', () => {
+        state.scans++;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        // Respuesta fija: aquí se prueba la interfaz, no el modelo. Lo que el
+        // modelo hace de verdad se comprobó contra la API real.
+        res.end(JSON.stringify(opts.visionResult || {
+          ok: true, confianza: 'alta', porcionGramos: 30,
+          macros: { calorias: 380, proteina: 11, carbohidratos: 70, azucar: 4,
+                    grasa: 5, grasaSaturada: 1.33, fibra: 2.67, sodioMg: 400 }
+        }));
       });
       return;
     }
