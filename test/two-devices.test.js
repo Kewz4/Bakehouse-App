@@ -394,3 +394,71 @@ test('una receta completa muestra sus etiquetas de dieta y se puede filtrar', as
     assert.deepEqual(d.errors, []);
   } finally { await d.close(); }
 });
+
+test('la receta se crea con el costo primero y el precio sale del margen', async () => {
+  // El orden que pidió: primero qué lleva, el costo aparece solo, y el precio
+  // se calcula a partir de cuánto quiere ganar. Antes pedía el precio de venta
+  // antes de que hubiera forma de saberlo.
+  const d = await device();
+  try {
+    await d.page.evaluate(() => {
+      data.ingredients.push(sello({ id: 'har', name: 'Harina', unit: 'bolsa',
+        quantity: 5, price: 6.5, unitSingle: 'lb' }));
+      save();
+      openRecipe();
+    });
+
+    await d.page.fill('#rName', 'Pan dulce');
+    await d.page.evaluate(() => { document.querySelector('#rYield').value = '10'; recipeTotals(); });
+
+    // Elegir el ingrediente. Al hacerlo la unidad salta a como se compra (lb),
+    // así que se cambia a gramos, que es como se usa en la receta.
+    await d.page.selectOption('.ingredient-line [data-n=ingredientId]', 'har');
+    await d.page.selectOption('.ingredient-line [data-n=unit]', 'g');
+    await d.page.evaluate(() => {
+      const l = document.querySelector('.ingredient-line');
+      l.querySelector('[data-n=qty]').value = '500';
+      lineTotal(l.querySelector('[data-n=qty]'));
+    });
+
+    // El costo aparece sin que ella escriba ningún precio.
+    await d.page.waitForFunction(
+      () => /\$0\.1[0-9]/.test(document.querySelector('#costPanel').textContent),
+      null, { timeout: 10000 });
+
+    // 500 g de harina a $6.50 las 5 lb = $1.4330, entre 10 porciones = $0.1433
+    const costo = await d.page.evaluate(() => recipeUnitCostForm());
+    assert.ok(Math.abs(costo - 0.14330) < 0.0005, 'costo por porción: ' + costo);
+
+    // Con 65 % de margen el precio sale solo.
+    const precio = await d.page.evaluate(() => recipeFinalPrice());
+    assert.ok(Math.abs(precio - costo / 0.35) < 1e-9, 'precio calculado: ' + precio);
+
+    await d.page.evaluate(() => saveRecipe(''));
+    await d.page.waitForFunction(() => data.recipes.length === 1, null, { timeout: 10000 });
+
+    const guardada = await d.page.evaluate(() => data.recipes[0]);
+    assert.equal(guardada.name, 'Pan dulce');
+    assert.ok(Math.abs(guardada.price - costo / 0.35) < 1e-9, 'se guardó el precio del margen');
+    // Y el costo de la línea se guarda sin redondear.
+    assert.ok(Math.abs(guardada.ingredients[0].cost - 6.5 / (5 * 453.592)) < 1e-12,
+      'el costo por gramo no debe redondearse: ' + guardada.ingredients[0].cost);
+    assert.deepEqual(d.errors, []);
+  } finally { await d.close(); }
+});
+
+test('"Te sale a" usa una unidad que se pueda leer, no $0.00 por gramo', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => {
+      data.ingredients.push(sello({ id: 'h2', name: 'Harina', unit: 'Bolsa',
+        quantity: 459, price: 1.25, unitSingle: 'g' }));
+      save(); go('inventory');
+    });
+    await d.page.waitForSelector('#ingredientRows tr', { timeout: 10000 });
+    const celda = await d.page.textContent('#ingredientRows tr td.amount');
+    assert.ok(!/\$0\.00/.test(celda), 'no debe mostrar $0.00: ' + celda);
+    assert.ok(/por lb|\/ lb/.test(celda) || /1\.2[0-9]/.test(celda),
+      'debería salir alrededor de $1.24 por lb: ' + celda);
+  } finally { await d.close(); }
+});

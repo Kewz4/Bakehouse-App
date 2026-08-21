@@ -122,6 +122,12 @@ const out = {
   parseQty: quantities.map(q => ({ in: q, out: B.parseQty(q) })),
   prettyQty: prettyInputs.map(n => ({ in: n, out: B.prettyQty(n) })),
   baseCost: ingredients.map(i => ({ in: i, out: B.baseCost(i) })),
+  // "A cuánto sale": tiene que elegir la MISMA unidad en los dos lados, o el
+  // teléfono diría "$1.24 por lb" y la laptop "$0.00 por g".
+  displayCost: ingredients.map(i => {
+    const d = B.displayCost(i);
+    return { in: i, amount: d.amount, unit: d.unit };
+  }),
   badgeIngredients: badgeIngredients,
   badgeRecipes: badgeRecipes.map(r => {
     const out = B.recipeBadges(r, badgeIngredients);

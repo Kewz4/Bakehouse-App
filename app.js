@@ -243,7 +243,7 @@ $('#expenseRows').innerHTML=ex.map(x=>`<tr><td data-label="Fecha">${fmtDate(x.da
 $('#expensesEmpty').style.display=ex.length?'none':'block';
 const qi=(($('#ingSearch')||{}).value||'').toLowerCase().trim();
 const ing=data.ingredients.filter(x=>!qi||(x.name||'').toLowerCase().includes(qi));
-$('#ingredientRows').innerHTML=ing.map(x=>`<tr><td class="main"><b>${esc(x.name)}</b></td><td data-label="Cómo lo compras">${esc(x.unit)} de ${esc(x.quantity)} ${esc(unitInfo(x.unitSingle).s)}</td><td data-label="Te costó">${money(x.price)}</td><td class="amount" data-label="Sale a">${money(baseCost(x)*unitInfo(x.unitSingle).f)} / ${esc(unitInfo(x.unitSingle).s)}</td><td class="actions"><button class="icon-btn" onclick="openIngredient('${x.id}')" aria-label="Editar ingrediente">✎</button><button class="icon-btn" onclick="removeItem('ingredients','${x.id}')" aria-label="Eliminar ingrediente">×</button></td></tr>`).join('');
+$('#ingredientRows').innerHTML=ing.map(x=>`<tr><td class="main"><b>${esc(x.name)}</b></td><td data-label="Cómo lo compras">${esc(x.unit)} de ${esc(x.quantity)} ${esc(unitInfo(x.unitSingle).s)}</td><td data-label="Te costó">${money(x.price)}</td><td class="amount" data-label="Sale a">${(()=>{const d=displayCost(x);return money(d.amount)+' / '+esc(d.unit)})()}</td><td class="actions"><button class="icon-btn" onclick="openIngredient('${x.id}')" aria-label="Editar ingrediente">✎</button><button class="icon-btn" onclick="removeItem('ingredients','${x.id}')" aria-label="Eliminar ingrediente">×</button></td></tr>`).join('');
 $('#ingredientsEmpty').style.display=ing.length?'none':'block'}
 function renderChart(){const src=(window.ALLDATA&&window.ALLDATA.sales)||data.sales;const now=new Date(),vals=[0,0,0,0,0,0],labels=[];
 for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);let l=d.toLocaleDateString('es',{month:'short'}).replace('.','');labels.push(l.charAt(0).toUpperCase()+l.slice(1))}
@@ -325,7 +325,7 @@ function ingredientLine(x={}){const opts=data.ingredients.map(i=>`<option value=
 const sel=data.ingredients.find(i=>i.id===x.ingredientId);
 const name=x.name||(sel&&sel.name)||'';
 const unit=x.unit||(sel?sel.unitSingle:'g')||'g';
-const cost=x.cost!=null&&x.cost!==''?x.cost:(sel?(baseCost(sel)*unitInfo(unit).f).toFixed(4):'');
+const cost=x.cost!=null&&x.cost!==''?x.cost:(sel?baseCost(sel)*unitInfo(unit).f:'');
 return `<div class="ingredient-line" data-name="${esc(name)}">
 ${data.ingredients.length?`<select data-n="ingredientId" onchange="pickIngredient(this)"><option value="">Elige un ingrediente</option>${opts}</select>`:`<input placeholder="Ingrediente" value="${esc(name)}" data-n="name">`}
 <input type="text" readonly data-pad="1" placeholder="cantidad" value="${x.qty!=null&&x.qty!==''?prettyQty(x.qty):''}" data-n="qty" onfocus="openPad(this)" onclick="openPad(this)" oninput="lineTotal(this)">
@@ -339,7 +339,7 @@ const us=line.querySelector('[data-n=unit]');
 us.innerHTML=unitOptions(ing.unitSingle,unitFamily(ing.unitSingle));
 pickUnit(us)}
 function pickUnit(select){const line=select.closest('.ingredient-line'),ing=data.ingredients.find(i=>i.id===(line.querySelector('[data-n=ingredientId]')||{}).value);
-if(ing)line.querySelector('[data-n=cost]').value=(baseCost(ing)*unitInfo(select.value).f).toFixed(6);
+if(ing)line.querySelector('[data-n=cost]').value=baseCost(ing)*unitInfo(select.value).f;
 lineTotal(select)}
 function addLine(){$('#ingredientsForm').insertAdjacentHTML('beforeend',ingredientLine());recipeTotals()}
 function lineTotal(el){const l=el.closest('.ingredient-line'),q=parseQty(l.querySelector('[data-n=qty]').value),c=+l.querySelector('[data-n=cost]').value||0;
@@ -371,25 +371,84 @@ function macroSummary(r){const m=recipeMacros(r,ingredientsById());
  const aviso=m.completo?'':` · sólo ${m.contadas} de ${m.total} ingredientes`;
  return `<p class="macro-line">Por porción: ${partes.join(' · ')}${esc(aviso)}</p>`}
 
-function recipeTotals(){const box=$('#recipeTotals');if(!box)return;let total=0;document.querySelectorAll('.ingredient-line').forEach(l=>{total+=parseQty(l.querySelector('[data-n=qty]').value)*(+l.querySelector('[data-n=cost]').value||0)});
-const y=parseQty($('#rYield').value)||1,pr=+$('#rPrice').value||0,u=total/y,m=pr?(pr-u)/pr*100:0;
-box.innerHTML=`<div class="recipe-data" style="margin:0"><div><span>Costo total</span><b>${money(total)}</b></div><div><span>Costo por porción</span><b>${money(u)}</b></div><div><span>Precio / porción</span><b>${money(pr)}</b></div><div><span>Ganas del precio</span><b class="${!pr?'':m>=55?'positive':'negative'}">${pr?m.toFixed(0)+'%':'—'}</b></div></div>${u&&(!pr||m<55)?`<p class="helper">Cobrando <b>${money(u/0.35)}</b> por porción tendrías buena ganancia.</p>`:''}${macroSummary(formRecipe())}`}
+function recipeTotals(){const box=$('#costPanel');if(!box)return;
+let total=0;document.querySelectorAll('.ingredient-line').forEach(l=>{
+ total+=parseQty(l.querySelector('[data-n=qty]').value)*(+l.querySelector('[data-n=cost]').value||0)});
+const y=parseQty($('#rYield').value)||1,u=total/y;
+
+box.innerHTML=`<div class="cost-main"><b>${money(u)}</b><span>cada porción</span></div>
+ <div class="cost-side"><b>${money(total)}</b><span>la receta entera</span></div>
+ ${total?'':'<p class="cost-empty">Agrega ingredientes y el costo aparece solo.</p>'}`;
+
+const pr=recipeFinalPrice(),gan=pr-u;
+const pp=$('#pricePanel');
+if(pp)pp.innerHTML=`<div class="price-result${gan<0&&pr?' loss':''}">
+ <span>${recipeMode==='margin'?'Cobrando así, cada porción sale a':'Cada porción'}</span>
+ <strong>${money(pr)}</strong>
+ ${pr&&u?`<small>${gan>=0?`Te quedan ${money(gan)} de ganancia por porción`:`Estás perdiendo ${money(-gan)} por porción`}</small>`:''}
+ </div>${!u&&recipeMode==='margin'?'<p class="helper">Primero agrega los ingredientes: el precio se calcula a partir de lo que te cuesta.</p>':''}`;
+
+const rt=$('#recipeTotals');
+if(rt)rt.innerHTML=macroSummary(formRecipe())+badgeRow(formRecipe())}
 
 // Reconstruye la receta a partir del formulario abierto, para poder calcular
-// los macros mientras ella todavía está escribiendo.
+// los macros y las etiquetas mientras ella todavía está escribiendo.
 function formRecipe(){const lines=[...document.querySelectorAll('.ingredient-line')].map(l=>({
  ingredientId:(l.querySelector('[data-n=ingredientId]')||{}).value||'',
  qty:parseQty(l.querySelector('[data-n=qty]').value),
- unit:(l.querySelector('[data-n=unit]')||{}).value||'u'}));
+ unit:(l.querySelector('[data-n=unit]')||{}).value||'u'})).filter(x=>x.qty>0);
  return {yield:parseQty(($('#rYield')||{}).value)||1,ingredients:lines}}
+
+// Precio de la receta: o sale de un margen, o se escribe a mano.
+let recipeMode='margin', margenPct=65;
+function setRecipeMode(m){recipeMode=m;
+ document.querySelectorAll('#priceMode button').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+ $('#marginBox').style.display=m==='margin'?'block':'none';
+ $('#manualBox').style.display=m==='manual'?'block':'none';
+ recipeTotals()}
+function setRecipeMargin(v){margenPct=+v;$('#marginVal').textContent=Math.round(margenPct)+'%';recipeTotals()}
+// El precio que se guardará, venga de donde venga.
+function recipeFinalPrice(){const u=recipeUnitCostForm();
+ if(recipeMode==='manual')return +($('#rPrice')||{}).value||0;
+ if(!u||margenPct>=100)return 0;
+ return u/(1-margenPct/100)}
+function recipeUnitCostForm(){let total=0;
+ document.querySelectorAll('.ingredient-line').forEach(l=>{
+  total+=parseQty(l.querySelector('[data-n=qty]').value)*(+l.querySelector('[data-n=cost]').value||0)});
+ return total/(parseQty(($('#rYield')||{}).value)||1)}
+
+// El orden sigue el de la cabeza de quien cocina: qué es, qué lleva, cuánto
+// cuesta y sólo entonces cuánto cobrar. Antes pedía el precio de venta primero,
+// cuando todavía no había forma de saberlo.
 function openRecipe(id){const r=data.recipes.find(x=>x.id===id)||{name:'',yield:1,price:'',ingredients:[],photo:''};
-openModal(id?'Editar receta':'Nueva receta',`<div class="form-grid">${field('Nombre del postre','rName','text',esc(r.name))}${field('Porciones que rinde','rYield','text',r.yield,'readonly data-pad="1" onfocus="openPad(this)" onclick="openPad(this)" oninput="recipeTotals()"')}${field('Precio de venta por porción ($)','rPrice','number',r.price,'min="0" step="0.01" inputmode="decimal" oninput="recipeTotals()"')}
-<div class="field full"><label>Foto del postre (opcional)</label><div class="photo-drop"><img id="photoPreview" src="${esc(r.photo||'')}" data-value="${esc(r.photo||'')}" alt="Vista previa" style="${r.photo?'':'display:none'}">
+recipeMode=(+r.price>0)?'manual':'margin';margenPct=65;
+openModal(id?'Editar receta':'Nueva receta',`<div class="form-grid">${field('Nombre del postre','rName','text',esc(r.name))}${field('¿Cuántas porciones rinde?','rYield','text',r.yield,'readonly data-pad="1" onfocus="openPad(this)" onclick="openPad(this)" oninput="recipeTotals()"')}</div>
+
+<h3 style="margin-top:20px">¿Qué lleva?</h3><p class="helper">Elige un ingrediente y toca la cantidad: se abre un teclado con números y fracciones (½, ⅓, ¼…).</p>${ingredientLines(r.ingredients)}
+
+<div id="costPanel" class="cost-panel"></div>
+
+<h3 style="margin-top:20px">¿Cuánto vas a cobrar?</h3>
+<div class="seg" id="priceMode">
+ <button type="button" class="${recipeMode==='margin'?'active':''}" data-mode="margin" onclick="setRecipeMode('margin')">Con un margen</button>
+ <button type="button" class="${recipeMode==='manual'?'active':''}" data-mode="manual" onclick="setRecipeMode('manual')">Yo pongo el precio</button>
+</div>
+<div id="marginBox" style="display:${recipeMode==='margin'?'block':'none'}">
+ <div class="margin-row"><span>De cada venta quiero ganar</span><b id="marginVal">${margenPct}%</b></div>
+ <input id="rMargin" type="range" min="30" max="90" step="5" value="${margenPct}" oninput="setRecipeMargin(this.value)">
+ <p class="helper">La mayoría de la repostería se mueve entre 60 % y 70 %.</p>
+</div>
+<div id="manualBox" style="display:${recipeMode==='manual'?'block':'none'}">
+ ${field('Precio por porción ($)','rPrice','number',r.price,'min="0" step="0.01" inputmode="decimal" oninput="recipeTotals()"')}
+</div>
+<div id="pricePanel"></div>
+<div id="recipeTotals"></div>
+
+<div class="field full" style="margin-top:18px"><label>Foto del postre (opcional)</label><div class="photo-drop"><img id="photoPreview" src="${esc(r.photo||'')}" data-value="${esc(r.photo||'')}" alt="Vista previa" style="${r.photo?'':'display:none'}">
 <div class="photo-btns"><input id="rCam" type="file" accept="image/*" capture="environment" onchange="previewPhoto(event)" hidden><input id="rPhoto" type="file" accept="image/*" onchange="previewPhoto(event)" hidden>
 <button type="button" class="btn alt small" onclick="$('#rCam').click()">📷 Tomar foto</button><button type="button" class="btn alt small" onclick="$('#rPhoto').click()">🖼 Elegir foto</button><button type="button" class="btn danger small" onclick="clearPhoto()">Quitar</button></div></div>
-<p class="helper" id="photoHint">Toma una foto o elige una de tu galería.</p></div></div>
-<h3 style="margin-top:20px">Ingredientes usados en la receta</h3><p class="helper">Elige un ingrediente y toca la cantidad: se abre un teclado con números y fracciones (½, ⅓, ¼…).</p>${ingredientLines(r.ingredients)}
-<div id="recipeTotals" style="margin-top:16px"></div>
+<p class="helper" id="photoHint">Toma una foto o elige una de tu galería.</p></div>
+
 <div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="saveRecipe('${id||''}')">Guardar receta</button></div>`);
 document.querySelectorAll('.ingredient-line [data-n=qty]').forEach(i=>lineTotal(i));recipeTotals()}
 function clearPhoto(){const img=$('#photoPreview');img.src='';img.dataset.value='';img.style.display='none';$('#photoHint').textContent='Sin foto.'}
@@ -404,7 +463,7 @@ const url=await uploadPhoto(dataUrl,file.name);
 if(url){img.dataset.value=url;img.src=url;hint.textContent='Foto guardada ✓'}}
 catch(err){console.error(err);hint.textContent='No pude usar esa foto.';toast('No pude usar esa foto. Intenta con otra.',true)}
 finally{e.target.value=''}}
-function saveRecipe(id){const name=$('#rName').value.trim(),yieldN=parseQty($('#rYield').value)||0,price=+$('#rPrice').value;
+function saveRecipe(id){const name=$('#rName').value.trim(),yieldN=parseQty($('#rYield').value)||0,price=recipeFinalPrice();
 if(!name||!yieldN)return toast('Añade el nombre y cuántas porciones rinde.',true);
 const ingredients=[...document.querySelectorAll('.ingredient-line')].map(l=>{const sel=l.querySelector('[data-n=ingredientId]'),ing=data.ingredients.find(i=>i.id===(sel&&sel.value));const manual=l.querySelector('[data-n=name]');
 return{ingredientId:ing?ing.id:undefined,name:(ing&&ing.name)||(manual&&manual.value.trim())||l.dataset.name||'',qty:parseQty(l.querySelector('[data-n=qty]').value),unit:(l.querySelector('[data-n=unit]')||{}).value||'u',cost:+l.querySelector('[data-n=cost]').value||0}}).filter(x=>x.name&&x.qty>0);

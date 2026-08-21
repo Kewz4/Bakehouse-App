@@ -76,6 +76,27 @@ const unitFamily=k=>unitInfo(k).fam;
 // costo del ingrediente por unidad base (por gramo, por ml o por unidad)
 function baseCost(ing){const q=(+ing.quantity||1)*unitInfo(ing.unitSingle).f;return (+ing.price||0)/(q||1)}
 
+/**
+ * A cuánto sale el ingrediente, en una unidad que se pueda leer.
+ *
+ * Decir "$0.00 por g" es inútil: una harina de $1.25 la bolsa de 459 g cuesta
+ * $0.0027 el gramo, y a dos decimales eso es cero. No era un cálculo malo, era
+ * una unidad mal elegida.
+ *
+ * Se busca la unidad más pequeña de su misma familia con la que el número pase
+ * de 10 centavos, que es donde deja de parecer cero: esa harina sale "$1.23 por
+ * lb" y los huevos siguen saliendo "$0.20 por u".
+ */
+const COST_MIN=0.10;
+function displayCost(ing){
+ const porBase=baseCost(ing);
+ const fam=unitFamily(ing.unitSingle);
+ const opciones=Object.entries(UNITS).filter(([k,v])=>v.fam===fam)
+   .sort((a,b)=>a[1].f-b[1].f);
+ if(!opciones.length)return {amount:porBase,unit:unitInfo(ing.unitSingle).s};
+ const elegida=opciones.find(([k,v])=>porBase*v.f>=COST_MIN)||opciones[opciones.length-1];
+ return {amount:porBase*elegida[1].f,unit:elegida[1].s}}
+
 function recipeCost(r){return (r.ingredients||[]).reduce((s,i)=>s+(+i.qty||0)*(+i.cost||0),0)}function recipePrice(r){return +r.price||0}function recipeUnitCost(r){return recipeCost(r)/(+r.yield||1)}function recipeMargin(r){const p=recipePrice(r);return p?(p-recipeUnitCost(r))/p*100:0}function suggestPrice(r,target=65){return recipeUnitCost(r)/(1-target/100)}
 
 // ---------------------------------------------------------------------------
@@ -245,6 +266,7 @@ const ALL_BADGES=BADGES.map(b=>({k:b.k,n:b.n,emoji:b.emoji,d:b.d}))
 
 return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS,
         parseQty:parseQty, prettyQty:prettyQty, unitFamily:unitFamily, baseCost:baseCost,
+        displayCost:displayCost, COST_MIN:COST_MIN,
         recipeCost:recipeCost, recipePrice:recipePrice, recipeUnitCost:recipeUnitCost,
         recipeMargin:recipeMargin, suggestPrice:suggestPrice,
         MACROS:MACROS, MACRO_KEYS:MACRO_KEYS, hasMacros:hasMacros,

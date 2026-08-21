@@ -61,7 +61,13 @@ final class MathConformanceTests: XCTestCase {
         let macroRecipes: [MacroRecipeCase]
         let parseQty: [ParseCase]
         let prettyQty: [PrettyCase]
+        struct DisplayCostCase: Decodable {
+            let `in`: IngredientCase.Input
+            let amount: Double
+            let unit: String
+        }
         let baseCost: [IngredientCase]
+        let displayCost: [DisplayCostCase]
         let recipe: [RecipeCase]
     }
 
@@ -223,5 +229,37 @@ final class MathConformanceTests: XCTestCase {
 
         XCTAssertTrue(got.badges.isEmpty)
         XCTAssertEqual(got.reason, .missingData)
+    }
+
+    /// "A cuánto sale" tiene que elegir la misma unidad en los dos lados.
+    /// Si no, el teléfono diría "$1.24 por lb" y la laptop "$0.00 por g" para
+    /// el mismo ingrediente.
+    func testReadableCostUnitMatchesJavaScript() throws {
+        for c in try load().displayCost {
+            let ing = Ingredient(name: c.in.name, unit: "paquete",
+                                 quantity: c.in.quantity, price: c.in.price,
+                                 unitSingle: c.in.unitSingle)
+            let got = ing.displayCost
+            XCTAssertEqual(got.unit, c.unit, "«\(c.in.name)»: unidad distinta")
+            XCTAssertEqual(got.amount, c.amount, accuracy: 1e-9, "«\(c.in.name)»: importe distinto")
+        }
+    }
+
+    /// Regresión: el costo por unidad de una línea NO puede redondearse.
+    /// La web lo guardaba con 4 decimales y iOS con toda la precisión, así que
+    /// la misma receta costaba distinto en cada plataforma — 1.19% de más en la
+    /// web para una harina que sale a $0.0028661 el gramo.
+    func testRecipeLineCostKeepsFullPrecision() {
+        let harina = Ingredient(name: "Harina", unit: "bolsa", quantity: 5,
+                                price: 6.5, unitSingle: "lb")
+        let perGram = harina.baseCost
+        XCTAssertEqual(perGram, 6.5 / (5 * 453.592), accuracy: 1e-12)
+
+        let line = RecipeLine(ingredientId: harina.id, name: "Harina",
+                              qty: 500, unit: "g", cost: perGram)
+        XCTAssertEqual(line.lineTotal, 500 * perGram, accuracy: 1e-9)
+        // Con el redondeo viejo daba 1.45 en vez de 1.4330.
+        XCTAssertLessThan(abs(line.lineTotal - 1.4330), 0.0005,
+                          "el costo de la línea se desvió: \(line.lineTotal)")
     }
 }

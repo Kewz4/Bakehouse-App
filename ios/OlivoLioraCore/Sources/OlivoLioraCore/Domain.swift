@@ -61,7 +61,27 @@ public struct Ingredient: RecordBacked, Hashable, Sendable {
         return price / (q == 0 ? 1 : q)
     }
 
-    /// A cuánto sale una unidad de compra: "$0.29 / lb".
+    /// A cuánto sale, en una unidad que se pueda leer.
+    ///
+    /// Decir "$0.00 por g" es inútil: una harina de $1.25 la bolsa de 459 g sale
+    /// a $0.0027 el gramo, y a dos decimales eso es cero. No era un cálculo
+    /// malo, era una unidad mal elegida.
+    ///
+    /// Se elige la unidad más pequeña de la misma familia con la que el número
+    /// pase de 10 centavos: esa harina sale "$1.24 por lb" y los huevos siguen
+    /// saliendo "$0.20 por u". Réplica de displayCost() en business-core.js.
+    public var displayCost: (amount: Double, unit: String) {
+        let perBase = baseCost
+        let options = Units.inFamily(Units.family(unitSingle)).sorted { $0.factor < $1.factor }
+        guard !options.isEmpty else { return (perBase, Units.info(unitSingle).short) }
+        let chosen = options.first { perBase * $0.factor >= Ingredient.costMinimum } ?? options[options.count - 1]
+        return (perBase * chosen.factor, chosen.short)
+    }
+
+    /// Por debajo de esto el número se ve como cero y hay que subir de unidad.
+    public static let costMinimum: Double = 0.10
+
+    @available(*, deprecated, message: "Usa displayCost: daba $0.00 para ingredientes que se miden en gramos")
     public var displayUnitCost: Double { baseCost * Units.info(unitSingle).factor }
 }
 

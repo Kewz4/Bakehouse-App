@@ -263,6 +263,68 @@
       "out": 5
     }
   ],
+  "displayCost": [
+    {
+      "in": {
+        "name": "Harina",
+        "quantity": 5,
+        "price": 6.5,
+        "unitSingle": "lb"
+      },
+      "amount": 1.3,
+      "unit": "lb"
+    },
+    {
+      "in": {
+        "name": "Azúcar",
+        "quantity": 2,
+        "price": 3,
+        "unitSingle": "kg"
+      },
+      "amount": 0.680388,
+      "unit": "lb"
+    },
+    {
+      "in": {
+        "name": "Huevos",
+        "quantity": 12,
+        "price": 2.4,
+        "unitSingle": "u"
+      },
+      "amount": 0.19999999999999998,
+      "unit": "u"
+    },
+    {
+      "in": {
+        "name": "Leche",
+        "quantity": 1,
+        "price": 1.15,
+        "unitSingle": "l"
+      },
+      "amount": 0.276,
+      "unit": "taza"
+    },
+    {
+      "in": {
+        "name": "Vainilla",
+        "quantity": 60,
+        "price": 4.2,
+        "unitSingle": "ml"
+      },
+      "amount": 0.35000000000000003,
+      "unit": "cdta"
+    },
+    {
+      "in": {
+        "name": "Raro",
+        "quantity": 0,
+        "price": 5,
+        "unitSingle": "g"
+      },
+      "amount": 5,
+      "unit": "g"
+    }
+  ],
   "badgeIngredients": {
     "almendra": {
       "id": "almendra",

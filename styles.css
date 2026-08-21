@@ -191,3 +191,20 @@ body.pad-open .tabbar{opacity:0;pointer-events:none}
     .bfilter.active{background:var(--green);color:#fff;border-color:var(--green)}
     .bfilter.active span{opacity:.85}
     .bfilter.clear{background:transparent;border-style:dashed}
+
+    /* ===== Editor de receta: costo primero, precio después ===== */
+    .cost-panel{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;background:var(--ink);color:#fff;border-radius:15px;padding:18px;margin-top:18px}
+    .cost-panel .cost-main{flex:1;min-width:130px}
+    .cost-panel .cost-main b{display:block;font-size:30px;letter-spacing:-1px}
+    .cost-panel .cost-side{text-align:right}
+    .cost-panel .cost-side b{display:block;font-size:17px;opacity:.9}
+    .cost-panel span{display:block;font-size:11px;opacity:.75;margin-top:2px}
+    .cost-panel .cost-empty{flex-basis:100%;margin:6px 0 0;font-size:11px;opacity:.75}
+    .margin-row{display:flex;justify-content:space-between;align-items:center;font-size:13px;color:var(--muted);margin-top:4px}
+    .margin-row b{font-size:16px;color:var(--green)}
+    #rMargin{width:100%;accent-color:var(--green);margin:6px 0}
+    .price-result{background:var(--green);color:#fff;border-radius:13px;padding:16px;margin-top:12px}
+    .price-result.loss{background:var(--red)}
+    .price-result span{font-size:12px;opacity:.78}
+    .price-result strong{display:block;font-size:28px;margin-top:3px;letter-spacing:-1px}
+    .price-result small{display:block;margin-top:6px;font-size:12px;font-weight:700;opacity:.92}

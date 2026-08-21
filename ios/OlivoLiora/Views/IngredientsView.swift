@@ -40,10 +40,11 @@ struct IngredientsView: View {
                     }
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 2) {
-                        Text(Money.format(ing.displayUnitCost))
+                        let cost = ing.displayCost
+                        Text(Money.format(cost.amount))
                             .font(Theme.rounded(16, .heavy))
                             .foregroundStyle(Theme.ink)
-                        Text("por \(short)")
+                        Text("por \(cost.unit)")
                             .font(Theme.rounded(11))
                             .foregroundStyle(Theme.muted)
                     }
@@ -130,7 +131,7 @@ struct IngredientEditor: View {
                         .font(Theme.rounded(13))
                         .foregroundStyle(.white.opacity(0.8))
                     Spacer()
-                    Text("\(Money.format(preview.displayUnitCost)) por \(Units.info(unitSingle).short)")
+                    Text("\(Money.format(preview.displayCost.amount)) por \(preview.displayCost.unit)")
                         .font(Theme.rounded(18, .bold))
                         .foregroundStyle(.white)
                 }
