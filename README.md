@@ -154,6 +154,9 @@ CI lo hace en cada push a `ios/`:
 Sale **sin firmar**, con la estructura `Payload/OlivoLiora.app` que espera
 KravaSign. También se puede lanzar a mano desde *Actions → Run workflow*.
 
+El runner compila con **Xcode 26.6 / SDK iPhoneOS 26.5**, así que Liquid Glass
+va incluido de verdad (no es el camino alternativo). Pesa ~550 kB.
+
 En local (hace falta un Mac):
 
 ```bash

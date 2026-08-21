@@ -220,3 +220,32 @@ test('sin Blob Store la app sigue funcionando y guarda en el dispositivo', async
     await new Promise(r => solo.close(r));
   }
 });
+
+test('una foto tomada sin señal se sube sola y deja de abultar el documento', async () => {
+  // Una foto guardada como texto (data:image/…) pesa cientos de kB dentro del
+  // documento compartido. Si se juntan varias, el documento deja de caber y la
+  // sincronización se rompe. Al volver el internet tienen que convertirse en
+  // direcciones normales sin que nadie haga nada.
+  const phone = await device();
+  try {
+    await phone.page.evaluate(() => {
+      const punto = 'data:image/jpeg;base64,' + 'A'.repeat(2000);
+      data.recipes.push(sello({
+        id: crypto.randomUUID(), name: 'Pastel sin señal',
+        yield: 8, price: 3, ingredients: [], photo: punto
+      }));
+      save();
+    });
+
+    await phone.page.waitForFunction(
+      () => data.recipes[0] && data.recipes[0].photo.startsWith('http'),
+      null, { timeout: 10000 });
+
+    const foto = await phone.page.evaluate(() => data.recipes[0].photo);
+    assert.ok(foto.startsWith('https://blob.test.local/postres/'), 'la foto quedó como dirección: ' + foto);
+
+    const doc = await phone.page.evaluate(() => JSON.stringify(toWire()));
+    assert.ok(!doc.includes('data:image'), 'el documento ya no lleva la foto en texto');
+    assert.deepEqual(phone.errors, []);
+  } finally { await phone.close(); }
+});

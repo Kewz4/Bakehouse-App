@@ -81,6 +81,9 @@ async function syncNow(){
   sucio=!(S.contains(j.doc||S.emptyDoc(),enviado)&&escrituras===generacion);
   setSync(sucio?'espera':'guardado');
   if(sucio)scheduleSync(1500);
+  // Acabamos de comprobar que hay señal: buen momento para subir las fotos que
+  // se hayan quedado guardadas como texto. Si no hay ninguna, no hace nada.
+  reconciliarFotos();
  }catch(e){
   // Sin señal o servidor caído: lo local queda intacto y reintentamos con
   // esperas cada vez más largas, hasta un minuto.
@@ -105,6 +108,28 @@ async function pull(){
   if(antes!==despues){saveLocal();render();if(!sucio)setSync('guardado')}
  }catch(e){/* sin señal: da igual, lo intentamos luego */}}
 
+// Una foto tomada sin señal se queda guardada como texto (data:image/…) dentro
+// del documento. Eso abulta cientos de kB por foto, no se ve en los otros
+// dispositivos, y si se juntan varias el documento deja de caber y la
+// sincronización se rompe del todo.
+//
+// Esto las va subiendo de una en una en cuanto hay internet y las reemplaza por
+// su dirección. Se cura solo: las fotos se suben por su propio endpoint, así que
+// funciona incluso si el documento ya está demasiado grande para subirse.
+let subiendoFotos=false;
+async function reconciliarFotos(){
+ if(!CLOUD||subiendoFotos)return;
+ const pendientes=data.recipes.filter(r=>typeof r.photo==='string'&&r.photo.startsWith('data:'));
+ if(!pendientes.length)return;
+ subiendoFotos=true;
+ try{let alguna=false;
+  for(const r of pendientes){
+   const url=await uploadPhoto(r.photo,(r.name||'postre')+'.jpg');
+   if(!url)break;                    // sigue sin señal: se reintenta luego
+   r.photo=url;sello(r);alguna=true}
+  if(alguna){saveLocal();render();sucio=true;escrituras++;scheduleSync(300)}}
+ finally{subiendoFotos=false}}
+
 async function bootSync(){
  loadLocal();render();
  try{
@@ -116,6 +141,7 @@ async function bootSync(){
   if(j.doc){fromWire(S.mergeDocs(toWire(),j.doc));saveLocal();render()}
   // Subimos de una lo que hubiera quedado pendiente de la última vez.
   await syncNow();
+  reconciliarFotos();
   arrancarVigilancia();
  }catch(e){CLOUD=false;setSync('local');
   // Puede que sólo sea que ahora no hay señal: si vuelve, reintentamos.
@@ -128,7 +154,7 @@ function arrancarVigilancia(){
  pullTimer=setInterval(()=>{if(document.visibilityState==='visible')pull()},30000);
  document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){pull();if(sucio)scheduleSync(200)}});
  window.addEventListener('focus',()=>pull());
- window.addEventListener('online',()=>{intentos=0;scheduleSync(200);pull()});
+ window.addEventListener('online',()=>{intentos=0;scheduleSync(200);pull();reconciliarFotos()});
  // Último intento de subir si cierra la pestaña con algo pendiente.
  window.addEventListener('pagehide',()=>{
   if(!CLOUD||!sucio||!navigator.sendBeacon)return;

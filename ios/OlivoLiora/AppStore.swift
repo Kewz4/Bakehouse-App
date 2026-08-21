@@ -52,6 +52,7 @@ final class AppStore {
             }
             self.scheduleSync(after: .milliseconds(200))
             self.refreshFromServer()
+            Task { await self.reconcilePhotos() }
         }
         monitor.start()
         Task { await boot() }
@@ -134,6 +135,7 @@ final class AppStore {
             cloudEnabled = true
             if let remote = res.doc { adopt(MergeEngine.merge(doc, remote)) }
             await performSync()
+            await reconcilePhotos()
             startPeriodicRefresh()
         } catch {
             cloudEnabled = false
@@ -187,6 +189,10 @@ final class AppStore {
             attempt = 0
             syncState = pendingUpload ? .waitingForNetwork : .saved
             if pendingUpload { scheduleSync(after: .milliseconds(1500)) }
+            // Acabamos de comprobar que hay señal: buen momento para subir las
+            // fotos que se hayan quedado guardadas como texto. Si no hay
+            // ninguna, no hace nada.
+            Task { await reconcilePhotos() }
         } catch {
             // Sin señal o servidor caído. Lo local sigue intacto: reintentamos
             // con esperas cada vez más largas, hasta un minuto.
@@ -251,6 +257,33 @@ final class AppStore {
     }
 
     // MARK: - Fotos
+
+    private var reconcilingPhotos = false
+
+    /// Una foto tomada sin señal se queda dentro del documento como texto
+    /// (data:image/…). Son cientos de kB por foto, no se ven en los otros
+    /// dispositivos, y si se juntan varias el documento deja de caber y la
+    /// sincronización se rompe del todo.
+    ///
+    /// Esto las sube de una en una en cuanto hay internet y las reemplaza por su
+    /// dirección. Se cura solo: las fotos van por su propio endpoint, así que
+    /// funciona incluso si el documento ya está demasiado grande para subirse.
+    func reconcilePhotos() async {
+        guard cloudEnabled, !reconcilingPhotos else { return }
+        let pending = Analytics.recipes(doc).filter { $0.photo.hasPrefix("data:") }
+        guard !pending.isEmpty else { return }
+
+        reconcilingPhotos = true
+        defer { reconcilingPhotos = false }
+
+        for var recipe in pending {
+            let url = await uploadPhoto(dataURL: recipe.photo,
+                                        filename: (recipe.name.isEmpty ? "postre" : recipe.name) + ".jpg")
+            guard url.hasPrefix("http") else { return }  // sigue sin señal
+            recipe.photo = url
+            save(recipe)
+        }
+    }
 
     /// Sube una foto y devuelve la dirección que hay que guardar en la receta.
     /// Si no hay señal, devuelve el data URL: la foto se ve igual en este

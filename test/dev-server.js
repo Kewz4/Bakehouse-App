@@ -26,7 +26,7 @@ const TYPES = {
 function createServer(options) {
   const opts = options || {};
   // `enabled:false` simula un despliegue sin Blob Store conectado.
-  const state = { doc: Sync.emptyDoc(), enabled: opts.enabled !== false, writes: 0 };
+  const state = { doc: Sync.emptyDoc(), enabled: opts.enabled !== false, writes: 0, uploads: 0 };
 
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://localhost');
@@ -69,8 +69,24 @@ function createServer(options) {
     }
 
     if (url.pathname === '/api/upload') {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      return res.end(JSON.stringify({ enabled: false }));
+      res.setHeader('Cache-Control', 'no-store');
+      if (!state.enabled || opts.uploads === false) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ enabled: false }));
+      }
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        return res.end(JSON.stringify({ enabled: true }));
+      }
+      // Guarda la foto y devuelve una dirección, como haría Blob.
+      let body = '';
+      req.on('data', c => { body += c; });
+      req.on('end', () => {
+        state.uploads++;
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ url: 'https://blob.test.local/postres/foto-' + state.uploads + '.jpg' }));
+      });
+      return;
     }
 
     const rel = url.pathname === '/' ? 'index.html' : url.pathname.slice(1);
