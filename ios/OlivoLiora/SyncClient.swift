@@ -159,6 +159,10 @@ actor SyncClient {
         var req = URLRequest(url: Config.visionURL)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        // Subir la foto por datos móviles y esperar a que el modelo la lea pasa
+        // de los 20 s que valen para el resto de peticiones. Con el timeout
+        // corto, una lectura que iba bien se veía como "no pude leerla".
+        req.timeoutInterval = 60
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "dataUrl": dataURL,
             "paquete": ["cantidad": packageQty, "unitSingle": packageUnit]

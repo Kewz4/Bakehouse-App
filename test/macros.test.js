@@ -238,3 +238,55 @@ test('el catálogo de etiquetas incluye paleo para poder filtrar por ella', () =
   assert.ok(keys.includes('gymReady'));
   assert.equal(new Set(keys).size, keys.length, 'sin claves repetidas');
 });
+
+test('rescata la porción de "1 Tbsp" cuando el ingrediente se mide en volumen', () => {
+  // Etiqueta estilo EE.UU.: dice "1 Tbsp." pero no cuántos gramos son.
+  // Una cucharada son 15 ml SIEMPRE, así que si el ingrediente se mide en
+  // volumen se puede convertir sin inventar nada.
+  const out = B.normalizarEtiqueta(
+    { encontrado: true, base: 'porcion', porcionGramos: null,
+      porcionTexto: '1 Tbsp.', porcionesPorEnvase: 16,
+      valores: { calorias: 60, proteina: 0, carbohidratos: 17, azucar: 17,
+                 grasa: 0, grasaSaturada: 0, fibra: 0, sodioMg: 0 } },
+    { cantidad: 340, unitSingle: 'ml' });
+  assert.equal(out.ok, true);
+  // 60 kcal por 15 ml -> 400 por 100 ml
+  assert.ok(Math.abs(out.macros.calorias - 400) < 0.5, 'kcal: ' + out.macros.calorias);
+});
+
+test('NO adivina los gramos de una cucharada si el ingrediente se mide en peso', () => {
+  // Una cucharada de miel pesa 21 g y una de harina 8 g. Sin saber qué es, la
+  // densidad no se puede suponer: mejor pedirlo que inventarlo.
+  const out = B.normalizarEtiqueta(
+    { encontrado: true, base: 'porcion', porcionGramos: null,
+      porcionTexto: '1 Tbsp.', porcionesPorEnvase: 16,
+      valores: { calorias: 60, proteina: 0, carbohidratos: 17, azucar: 17,
+                 grasa: 0, grasaSaturada: 0, fibra: 0, sodioMg: 0 } },
+    { cantidad: 340, unitSingle: 'g' });
+  // Con envase en gramos sí se puede por división: 340 g / 16 porciones.
+  assert.equal(out.ok, true);
+  const porcion = 340 / 16;
+  assert.ok(Math.abs(out.macros.calorias - 60 / porcion * 100) < 0.5);
+
+  // Pero sin saber cuánto trae el envase, no hay forma y se dice.
+  const sinNada = B.normalizarEtiqueta(
+    { encontrado: true, base: 'porcion', porcionGramos: null,
+      porcionTexto: '1 Tbsp.', porcionesPorEnvase: null,
+      valores: { calorias: 60, proteina: 0, carbohidratos: 17, azucar: 17,
+                 grasa: 0, grasaSaturada: 0, fibra: 0, sodioMg: 0 } },
+    { cantidad: 0, unitSingle: 'g' });
+  assert.equal(sinNada.ok, false);
+  assert.equal(sinNada.motivo, 'sin-porcion');
+});
+
+test('una etiqueta con muchos ceros sigue siendo válida', () => {
+  // La miel es 0 grasa, 0 proteína, 0 sodio. Todo ceros salvo azúcar: eso es
+  // información real, no una tabla vacía.
+  const out = B.normalizarEtiqueta({
+    encontrado: true, base: 'porcion', porcionGramos: 21,
+    valores: { calorias: 60, proteina: 0, carbohidratos: 17, azucar: 17,
+               grasa: 0, grasaSaturada: 0, fibra: 0, sodioMg: 0 } });
+  assert.equal(out.ok, true);
+  assert.ok(Math.abs(out.macros.azucar - 80.95) < 0.01);
+  assert.equal(out.macros.grasa, 0);
+});

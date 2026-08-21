@@ -169,6 +169,19 @@ function normalizarEtiqueta(lectura,paquete){
  if(!tieneAlgo)return {ok:false,motivo:'sin-datos'};
 
  let porcion=+lectura.porcionGramos||0;
+
+ // La etiqueta dice "1 Tbsp." pero no cuántos gramos son. Sólo se puede
+ // rescatar si el ingrediente se mide en VOLUMEN: una cucharada son 15 ml
+ // siempre, pero en gramos depende de qué sea (una de miel pesa 21 g y una de
+ // harina 8 g). Adivinar la densidad sería inventarse el dato.
+ if(!porcion&&lectura.porcionTexto&&paquete&&unitFamily(paquete.unitSingle)==='volumen'){
+  const t=String(lectura.porcionTexto).toLowerCase();
+  const CASERAS=[[/\b(tbsp|tablespoon|cucharada|cda)\b/,15],
+                 [/\b(tsp|teaspoon|cucharadita|cdta)\b/,5],
+                 [/\b(cup|taza)\b/,240],
+                 [/\b(fl\.? ?oz|onza l[ií]quida)\b/,29.5735]];
+  const num=parseFloat(t)||1;
+  for(const [re,ml] of CASERAS){if(re.test(t)){porcion=num*ml;break}}}
  // Si no dice el tamaño de la porción pero sí cuántas trae el envase, y
  // sabemos cuánto trae el envase, sale por división.
  if(!porcion&&paquete&&+lectura.porcionesPorEnvase>0){

@@ -45,6 +45,7 @@ const SCHEMA = {
     encontrado: { type: 'boolean' },
     base: { type: 'string', enum: ['porcion', '100g', 'desconocido'] },
     porcionGramos: { type: ['number', 'null'] },
+    porcionTexto: { type: ['string', 'null'] },
     porcionesPorEnvase: { type: ['number', 'null'] },
     valores: {
       type: 'object',
@@ -63,11 +64,17 @@ const SCHEMA = {
     },
     confianza: { type: 'string', enum: ['alta', 'media', 'baja'] }
   },
-  required: ['encontrado', 'base', 'porcionGramos', 'porcionesPorEnvase', 'valores', 'confianza']
+  required: ['encontrado', 'base', 'porcionGramos', 'porcionTexto',
+             'porcionesPorEnvase', 'valores', 'confianza']
 };
 
 const PROMPT = [
   'Eres un extractor de tablas nutricionales. Lee la etiqueta de la foto.',
+  'Puede estar en español ("Información Nutricional") o en inglés ("Nutrition',
+  'Facts"): trátalas igual. "Serving size" = tamaño de porción, "Amount per',
+  'serving" = cantidad por porción, "Total Sugars" = azúcares, "Total',
+  'Carbohydrate" = carbohidratos, "Protein" = proteína, "Total Fat" = grasa,',
+  '"Saturated Fat" = grasa saturada, "Dietary Fiber" = fibra.',
   '',
   'Reglas:',
   '- Copia los números EXACTAMENTE como aparecen. No conviertas, no calcules,',
@@ -76,7 +83,9 @@ const PROMPT = [
   '  "por porción" o "cantidad por porción"; "100g" si la tabla es por 100 g',
   '  o por 100 ml.',
   '- "porcionGramos": el tamaño de una porción en gramos (o ml). null si no',
-  '  aparece. Si dice "1 taza (30 g)", son 30.',
+  '  aparece. Si dice "1 taza (30 g)" o "1 Tbsp. (21g)", son 30 y 21.',
+  '- "porcionTexto": la porción tal como está escrita y completa, por ejemplo',
+  '  "1 Tbsp. (21g)" o "2 galletas". null si no aparece.',
   '- "porcionesPorEnvase": cuántas porciones trae el paquete. null si no aparece.',
   '- Los gramos en gramos. El sodio SIEMPRE en miligramos: si la etiqueta lo da',
   '  en gramos, multiplica por 1000 (esta es la única conversión permitida).',
@@ -138,7 +147,7 @@ function parseBody(req) {
 const MOTIVOS = {
   'sin-tabla':   'Esa foto no parece una tabla nutricional. Enfoca la parte donde dicen las calorías.',
   'sin-datos':   'No alcancé a leer los números. Prueba de nuevo con más luz y de frente.',
-  'sin-porcion': 'La etiqueta no dice cuánto pesa una porción, así que no puedo pasarlo a 100 g. Puedes escribirlos a mano.',
+  'sin-porcion': 'Leí la tabla, pero no dice cuánto pesa una porción. Escribe primero cuánto trae el paquete y vuelve a intentarlo.',
   'error':       'No pude leer la etiqueta ahora. Puedes escribir los datos a mano.'
 };
 
@@ -216,3 +225,8 @@ module.exports = async function handler(req, res) {
     clearTimeout(timer);
   }
 };
+
+// Vercel corta las funciones a los 10 segundos por defecto. Una foto subiendo
+// por datos móviles más la inferencia se pasa de ahí con facilidad, y desde
+// fuera eso se ve igual que "no pude leer la etiqueta".
+module.exports.config = { maxDuration: 60 };

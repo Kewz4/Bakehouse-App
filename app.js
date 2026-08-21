@@ -290,7 +290,7 @@ async function scanLabel(e){const file=e.target.files&&e.target.files[0];e.targe
  if(!file)return;
  const hint=$('#scanHint');if(hint)hint.textContent='Leyendo la etiqueta…';
  try{
-  const dataUrl=await compressImage(file,1400,.9);
+  const dataUrl=await compressImage(file,1100,.8);
   const paquete={cantidad:parseQty(($('#ingQty')||{}).value||0),unitSingle:($('#ingUnitSingle')||{}).value||'g'};
   const r=await fetch('api/vision',{method:'POST',headers:{'content-type':'application/json'},
    body:JSON.stringify({dataUrl,paquete})});

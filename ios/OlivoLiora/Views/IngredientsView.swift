@@ -248,7 +248,9 @@ struct IngredientEditor: View {
     }
 
     private func scan(image: UIImage) async {
-        guard let dataURL = RecipeEditor.dataURL(from: image, maxSide: 1400, quality: 0.9) else {
+        // Una tabla nutricional es texto grande: con 1100 px se lee igual de
+        // bien y el envío pesa la mitad, que es lo que hace que no se corte.
+        guard let dataURL = RecipeEditor.dataURL(from: image, maxSide: 1100, quality: 0.8) else {
             scanStatus = "No pude usar esa foto."
             return
         }
