@@ -165,11 +165,90 @@ function normalizarEtiqueta(lectura,paquete){
  return {ok:true,macros:macros,confianza:lectura.confianza||'media'};
 }
 
+// ---------------------------------------------------------------------------
+// Etiquetas de dieta
+// ---------------------------------------------------------------------------
+// Se calculan a partir de los macros POR PORCIÓN, con los cortes que usan las
+// etiquetas de alimentos (FDA) donde existen.
+//
+// Regla de oro: NO se pone ninguna etiqueta si falta algún ingrediente por
+// cubrir. Un "sin azúcar" en una receta de la que sólo se conocen tres de cinco
+// ingredientes no es un dato incompleto: es un dato falso, y alguien que evita
+// el azúcar por salud podría creerlo.
+const BADGES=[
+ {k:'sinAzucar', n:'Sin azúcar',      emoji:'🍭',
+  d:'Menos de 0.5 g de azúcar por porción',
+  test:p=>p.azucar<=0.5},
+ {k:'bajoAzucar',n:'Bajo en azúcar',  emoji:'🍬',
+  d:'5 g de azúcar o menos por porción',
+  test:p=>p.azucar>0.5&&p.azucar<=5},
+ {k:'keto',      n:'Keto',            emoji:'🥑',
+  d:'Pocos carbohidratos netos y mayoría de calorías de grasa',
+  test:p=>p.calorias>0&&(p.carbohidratos-(p.fibra||0))<=10&&(p.grasa*9)/p.calorias>=0.6},
+ {k:'gymReady',  n:'GymReady',        emoji:'💪',
+  d:'Buena carga de proteína por porción',
+  test:p=>p.proteina>=10&&p.calorias>0&&(p.proteina*4)/p.calorias>=0.2},
+ {k:'altaFibra', n:'Alta en fibra',   emoji:'🌾',
+  d:'5 g de fibra o más por porción',
+  test:p=>p.fibra>=5},
+ {k:'bajoGrasa', n:'Bajo en grasa',   emoji:'🪶',
+  d:'3 g de grasa o menos por porción',
+  test:p=>p.grasa<=3},
+ {k:'bajoSodio', n:'Bajo en sodio',   emoji:'🧂',
+  d:'140 mg de sodio o menos por porción',
+  test:p=>p.sodioMg<=140}];
+
+// Paleo NO se puede deducir de los macros: no es una cuestión de cantidades
+// sino de qué lleva la receta. Se mira por nombre de ingrediente, y por eso es
+// deliberadamente estricta: ante la duda, no se pone.
+const NO_PALEO=['harina','trigo','azucar','azúcar','leche','crema','queso',
+ 'mantequilla','yogur','yoghurt','maiz','maíz','arroz','avena','frijol','soya',
+ 'lenteja','garbanzo','cacahuate','maní','mani','levadura','margarina','pan',
+ 'galleta','cereal','sirope','jarabe'];
+// Excepciones: estas sí son paleo aunque el nombre contenga una palabra vetada.
+const SI_PALEO=['harina de almendra','harina de coco','harina de yuca',
+ 'harina de castaña','leche de coco','leche de almendra'];
+
+function esPaleo(ingredientes){
+ if(!ingredientes.length)return false;
+ return ingredientes.every(ing=>{
+  const n=String(ing.name||'').toLowerCase();
+  if(SI_PALEO.some(ok=>n.includes(ok)))return true;
+  return !NO_PALEO.some(mal=>n.includes(mal))})}
+
+/**
+ * Etiquetas de una receta.
+ *
+ * Devuelve también por qué no hay etiquetas, para poder decírselo en vez de
+ * dejar un hueco sin explicación.
+ */
+function recipeBadges(r,ingredientsById){
+ const m=recipeMacros(r,ingredientsById);
+ if(!m.total)return {badges:[],motivo:'sin-ingredientes',macros:m};
+ if(!m.completo)return {badges:[],motivo:'faltan-datos',macros:m};
+
+ const p=m.perServing;
+ const out=BADGES.filter(b=>{try{return b.test(p)}catch(e){return false}})
+                 .map(b=>({k:b.k,n:b.n,emoji:b.emoji,d:b.d}));
+
+ // Paleo se evalúa aparte, sobre los ingredientes de verdad.
+ const usados=(r.ingredients||[]).map(l=>ingredientsById[l.ingredientId]).filter(Boolean);
+ if(usados.length===(r.ingredients||[]).length&&esPaleo(usados)){
+  out.push({k:'paleo',n:'Paleo',emoji:'🥥',d:'Sin harinas, lácteos ni azúcar añadida'})}
+
+ return {badges:out,motivo:out.length?null:'ninguna',macros:m}}
+
+// Todas las etiquetas posibles, para armar el filtro.
+const ALL_BADGES=BADGES.map(b=>({k:b.k,n:b.n,emoji:b.emoji,d:b.d}))
+ .concat([{k:'paleo',n:'Paleo',emoji:'🥥',d:'Sin harinas, lácteos ni azúcar añadida'}]);
+
 return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS,
         parseQty:parseQty, prettyQty:prettyQty, unitFamily:unitFamily, baseCost:baseCost,
         recipeCost:recipeCost, recipePrice:recipePrice, recipeUnitCost:recipeUnitCost,
         recipeMargin:recipeMargin, suggestPrice:suggestPrice,
         MACROS:MACROS, MACRO_KEYS:MACRO_KEYS, hasMacros:hasMacros,
         macroPerBase:macroPerBase, recipeMacros:recipeMacros,
-        normalizarEtiqueta:normalizarEtiqueta};
+        normalizarEtiqueta:normalizarEtiqueta,
+        BADGES:BADGES, ALL_BADGES:ALL_BADGES,
+        recipeBadges:recipeBadges, esPaleo:esPaleo};
 });

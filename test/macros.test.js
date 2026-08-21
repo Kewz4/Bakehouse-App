@@ -150,3 +150,91 @@ test('un ingrediente con datos parciales sigue sumando lo que sí tiene', () => 
   assert.equal(m.totals.calorias, 200);
   assert.equal(m.totals.proteina, 0);
 });
+
+// --- Etiquetas de dieta -----------------------------------------------------
+
+const almendra = { id: 'a', name: 'Harina de almendra', quantity: 1, unitSingle: 'kg',
+  macros: { calorias: 579, proteina: 21, carbohidratos: 22, azucar: 4,
+            grasa: 50, grasaSaturada: 4, fibra: 12, sodioMg: 1 } };
+const huevo = { id: 'h', name: 'Huevos', quantity: 12, unitSingle: 'u',
+  macros: { calorias: 78, proteina: 6, carbohidratos: 0.6, azucar: 0.6,
+            grasa: 5, grasaSaturada: 1.6, fibra: 0, sodioMg: 62 } };
+const suero = { id: 's', name: 'Proteína de suero', quantity: 1, unitSingle: 'kg',
+  macros: { calorias: 400, proteina: 80, carbohidratos: 8, azucar: 3,
+            grasa: 6, grasaSaturada: 2, fibra: 1, sodioMg: 300 } };
+
+const names = out => out.badges.map(b => b.k).sort();
+
+test('NO pone etiquetas si falta algún ingrediente por cubrir', () => {
+  // Es la regla más importante de todas. "Sin azúcar" en una receta de la que
+  // se conoce media información no es un dato incompleto, es uno falso, y
+  // alguien que evita el azúcar por salud podría creerlo.
+  const r = { yield: 4, ingredients: [
+    { ingredientId: 'a', qty: 100, unit: 'g' },
+    { ingredientId: 'desconocido', qty: 1, unit: 'u' }
+  ]};
+  const out = B.recipeBadges(r, { a: almendra });
+  assert.deepEqual(out.badges, []);
+  assert.equal(out.motivo, 'faltan-datos');
+});
+
+test('una receta sin ingredientes no lleva etiquetas', () => {
+  const out = B.recipeBadges({ yield: 1, ingredients: [] }, {});
+  assert.deepEqual(out.badges, []);
+  assert.equal(out.motivo, 'sin-ingredientes');
+});
+
+test('sin azúcar sólo por debajo de medio gramo por porción', () => {
+  const cero = { id: 'z', name: 'Almendra', quantity: 1, unitSingle: 'kg',
+    macros: { calorias: 100, proteina: 5, carbohidratos: 2, azucar: 0,
+              grasa: 8, grasaSaturada: 1, fibra: 1, sodioMg: 5 } };
+  const r = { yield: 10, ingredients: [{ ingredientId: 'z', qty: 100, unit: 'g' }] };
+  assert.ok(names(B.recipeBadges(r, { z: cero })).includes('sinAzucar'));
+
+  // Con algo de azúcar pasa a "bajo", no a "sin".
+  const poco = Object.assign({}, cero, { macros: Object.assign({}, cero.macros, { azucar: 20 }) });
+  const b = names(B.recipeBadges(r, { z: poco }));
+  assert.ok(!b.includes('sinAzucar'));
+  assert.ok(b.includes('bajoAzucar'));
+});
+
+test('keto exige pocos carbohidratos netos Y mayoría de calorías de grasa', () => {
+  const r = { yield: 8, ingredients: [
+    { ingredientId: 'a', qty: 200, unit: 'g' }, { ingredientId: 'h', qty: 3, unit: 'u' }] };
+  assert.ok(names(B.recipeBadges(r, { a: almendra, h: huevo })).includes('keto'));
+
+  // Mucha proteína y poca grasa: no es keto aunque tenga pocos carbohidratos.
+  const rp = { yield: 4, ingredients: [{ ingredientId: 's', qty: 100, unit: 'g' }] };
+  const b = names(B.recipeBadges(rp, { s: suero }));
+  assert.ok(!b.includes('keto'), 'no debería ser keto: ' + b.join(','));
+  assert.ok(b.includes('gymReady'));
+});
+
+test('GymReady exige gramos de proteína y también proporción', () => {
+  // 10 g de proteína pero ahogados en calorías: no cuenta.
+  const graso = { id: 'g', name: 'Almendra', quantity: 1, unitSingle: 'kg',
+    macros: { calorias: 900, proteina: 10, carbohidratos: 10, azucar: 1,
+              grasa: 85, grasaSaturada: 10, fibra: 5, sodioMg: 10 } };
+  const r = { yield: 1, ingredients: [{ ingredientId: 'g', qty: 100, unit: 'g' }] };
+  assert.ok(!names(B.recipeBadges(r, { g: graso })).includes('gymReady'));
+});
+
+test('paleo se decide por los ingredientes, no por los macros', () => {
+  const rOk = { yield: 8, ingredients: [
+    { ingredientId: 'a', qty: 200, unit: 'g' }, { ingredientId: 'h', qty: 3, unit: 'u' }] };
+  assert.ok(names(B.recipeBadges(rOk, { a: almendra, h: huevo })).includes('paleo'),
+    '"harina de almendra" sí es paleo pese a decir harina');
+
+  const trigo = { id: 't', name: 'Harina de trigo', quantity: 1, unitSingle: 'kg',
+    macros: { calorias: 364, proteina: 10, carbohidratos: 76, azucar: 0.3,
+              grasa: 1, grasaSaturada: 0.2, fibra: 3, sodioMg: 2 } };
+  const rNo = { yield: 8, ingredients: [{ ingredientId: 't', qty: 200, unit: 'g' }] };
+  assert.ok(!names(B.recipeBadges(rNo, { t: trigo })).includes('paleo'));
+});
+
+test('el catálogo de etiquetas incluye paleo para poder filtrar por ella', () => {
+  const keys = B.ALL_BADGES.map(b => b.k);
+  assert.ok(keys.includes('paleo'));
+  assert.ok(keys.includes('gymReady'));
+  assert.equal(new Set(keys).size, keys.length, 'sin claves repetidas');
+});

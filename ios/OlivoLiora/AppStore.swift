@@ -80,6 +80,14 @@ final class AppStore {
     var recipesById: [String: Recipe] {
         Dictionary(recipes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     }
+    var ingredientsById: [String: Ingredient] {
+        Dictionary(ingredients.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+    }
+
+    /// Resumen nutricional de una receta, si hay datos.
+    func macros(of recipe: Recipe) -> RecipeMacros {
+        Analytics.macros(for: recipe, ingredients: ingredientsById)
+    }
 
     func recipe(id: String) -> Recipe? { recipesById[id] }
     func profit(of sale: Sale) -> Double { Analytics.profit(of: sale, recipes: recipesById) }
@@ -136,6 +144,7 @@ final class AppStore {
             if let remote = res.doc { adopt(MergeEngine.merge(doc, remote)) }
             await performSync()
             await reconcilePhotos()
+            await checkVision()
             startPeriodicRefresh()
         } catch {
             cloudEnabled = false
@@ -254,6 +263,26 @@ final class AppStore {
     func appWillResignActive() {
         LocalStore.save(doc)
         if pendingUpload { scheduleSync(after: .milliseconds(0)) }
+    }
+
+    // MARK: - Leer etiquetas nutricionales
+
+    /// Falso mientras el servidor no tenga la llave: entonces el botón de la
+    /// cámara ni aparece, en vez de ofrecer algo que va a fallar.
+    private(set) var visionEnabled = false
+
+    private func checkVision() async {
+        visionEnabled = await client.visionEnabled()
+    }
+
+    func scanLabel(dataURL: String, packageQty: Double, packageUnit: String) async -> SyncClient.LabelScan {
+        do {
+            return try await client.scanLabel(dataURL: dataURL,
+                                              packageQty: packageQty, packageUnit: packageUnit)
+        } catch {
+            return SyncClient.LabelScan(
+                ok: false, mensaje: "No pude leer la etiqueta ahora. Puedes escribir los datos a mano.")
+        }
     }
 
     // MARK: - Fotos

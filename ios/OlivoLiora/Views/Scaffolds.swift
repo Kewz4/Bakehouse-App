@@ -3,8 +3,13 @@ import OlivoLioraCore
 
 /// Estructura común de las listas (ventas, gastos, ingredientes).
 ///
-/// Una sola acción visible por pantalla, siempre en el mismo sitio: el botón
-/// grande de abajo a la derecha. No hay menús ni ajustes que descubrir.
+/// Va sobre `List` y no sobre `ScrollView` + `LazyVStack` por una razón muy
+/// concreta: `.swipeActions` SÓLO funciona dentro de una `List`. Fuera de ella
+/// el modificador compila igual y no hace absolutamente nada, que es la peor
+/// forma de fallar — parece implementado y no lo está.
+///
+/// La `List` va desnuda (sin separadores, sin fondo, sin sangrías propias) para
+/// que las tarjetas se vean igual que antes.
 struct ListScaffold<Content: View>: View {
     let eyebrow: String
     let title: String
@@ -18,20 +23,25 @@ struct ListScaffold<Content: View>: View {
     @ViewBuilder let content: () -> Content
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                BrandHeader(subtitle: subtitle ?? title)
-                SectionHeading(eyebrow: eyebrow, title: title)
+        List {
+            Group {
+                VStack(alignment: .leading, spacing: 14) {
+                    BrandHeader(subtitle: subtitle ?? title)
+                    SectionHeading(eyebrow: eyebrow, title: title)
+                }
+                .padding(.bottom, 2)
 
                 if isEmpty {
-                    EmptyHint(text: emptyText).padding(.top, 8)
-                } else {
-                    LazyVStack(spacing: 10) { content() }
+                    EmptyHint(text: emptyText)
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 96)
+            .plainRow()
+
+            content()
         }
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
+        .scrollContentBackground(.hidden)
         .background(Theme.cream)
         .scrollIndicators(.hidden)
         .searchable(text: $search, prompt: searchPrompt)
@@ -40,6 +50,37 @@ struct ListScaffold<Content: View>: View {
                 .padding(.trailing, 18)
                 .padding(.bottom, 18)
         }
+    }
+}
+
+extension View {
+    /// Una fila sin la decoración que `List` pone por defecto.
+    func plainRow(vertical: CGFloat = 5) -> some View {
+        self
+            .listRowSeparator(.hidden)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: vertical, leading: 16, bottom: vertical, trailing: 16))
+    }
+
+    /// Deslizar para editar (izquierda) y para borrar (derecha).
+    ///
+    /// `allowsFullSwipe: false` en el borrado a propósito: hay que deslizar y
+    /// además tocar el botón rojo. No hay deshacer, y el borrado viaja a todos
+    /// los dispositivos, así que un deslizón largo no debería bastar.
+    func rowActions(onEdit: @escaping () -> Void,
+                    onDelete: @escaping () -> Void) -> some View {
+        self
+            .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                Button(action: onEdit) {
+                    Label("Editar", systemImage: "pencil")
+                }
+                .tint(Theme.green)
+            }
+            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                Button(role: .destructive, action: onDelete) {
+                    Label("Borrar", systemImage: "trash")
+                }
+            }
     }
 }
 
@@ -108,7 +149,7 @@ struct EditorScaffold<Content: View>: View {
     }
 }
 
-/// Confirmación de borrado. Se pregunta siempre, porque no hay deshacer.
+/// Confirmación de borrado, para lo que cuesta rehacer (una receta entera).
 struct DeleteConfirm: ViewModifier {
     @Binding var isPresented: Bool
     let what: String

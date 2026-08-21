@@ -209,7 +209,27 @@ function go(view){if(!document.getElementById(view))view='dashboard';document.qu
 function fabAction(){({dashboard:openSale,recipes:openRecipe,sales:openSale,expenses:openExpense,inventory:openIngredient}[$('#fab').dataset.view||'dashboard'])()}
 function nav(){document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));go((location.hash||'#dashboard').slice(1));window.addEventListener('hashchange',()=>go(location.hash.slice(1)))}
 function render(){const sales=data.sales.reduce((a,s)=>a+(+s.total||0),0),production=data.sales.reduce((a,s)=>{let r=data.recipes.find(x=>x.id===s.recipeId);return a+(r?recipeUnitCost(r)*(+s.qty||0):0)},0),expenses=data.expenses.reduce((a,e)=>a+(+e.amount||0),0),profit=sales-production-expenses;$('#mSales').textContent=money(sales);$('#mCost').textContent=money(production);$('#mExpenses').textContent=money(expenses);$('#mProfit').textContent=money(profit);$('#mMargin').textContent=sales?'Te quedan '+Math.round(profit/sales*100)+' centavos de cada dólar':'Aún sin ventas';renderRecipes();renderTables();renderChart(sales);renderAlerts()}
-function renderRecipes(){const q=(($('#recipeSearch')||{}).value||'').toLowerCase().trim();const list=data.recipes.filter(r=>!q||(r.name||'').toLowerCase().includes(q));const el=$('#recipesList');el.innerHTML=list.length?list.map(r=>{const c=recipeCost(r),u=recipeUnitCost(r),p=recipePrice(r),m=recipeMargin(r),cls=!p?'warn':m>=60?'ok':m>=45?'warn':'bad';return `<article class="recipe">${r.photo?`<img class="recipe-photo" src="${esc(r.photo)}" alt="${esc(r.name)}" loading="lazy">`:''}<span class="tag">${esc(r.yield)} porciones</span><h3>${esc(r.name)}</h3><small>${(r.ingredients||[]).length} ingredientes · costo por porción ${money(u)}</small><div class="recipe-data"><div><span>Costo total</span><b>${money(c)}</b></div><div><span>Precio / porción</span><b>${money(p)}</b></div></div><span class="badge ${cls}">${p?`Ganas ${m.toFixed(0)}% de cada venta`:'Falta ponerle precio'}</span>${p&&m<60?`<p class="helper">Cobrando <b>${money(suggestPrice(r))}</b> ganarías más</p>`:''}${macroSummary(r)}<div class="recipe-actions"><button onclick="openRecipe('${r.id}')">Editar</button><button onclick="duplicateRecipe('${r.id}')">Duplicar</button><button onclick="quickFromRecipe('${r.id}')">Calcular precio</button><button class="negative" onclick="removeItem('recipes','${r.id}')">Eliminar</button></div></article>`}).join(''):`<div class="empty">${q?'Ninguna receta coincide con tu búsqueda.':'Crea tu primer postre y calcula en un minuto cuánto cobrar.'}</div>`}
+// Filtro por etiqueta de dieta. Vacío = todas.
+let filtroBadge='';
+function setBadgeFilter(k){filtroBadge=(filtroBadge===k)?'':k;renderRecipes()}
+
+// Sólo se ofrecen las etiquetas que de verdad tiene alguna receta: un filtro
+// con opciones que no devuelven nada es peor que no tener filtro.
+function badgeFilterRow(){
+ const idx=ingredientsById();
+ const cuenta={};
+ data.recipes.forEach(r=>{recipeBadges(r,idx).badges.forEach(b=>{cuenta[b.k]=(cuenta[b.k]||0)+1})});
+ const disponibles=ALL_BADGES.filter(b=>cuenta[b.k]);
+ if(!disponibles.length)return '';
+ return `<div class="badge-filters">${disponibles.map(b=>
+  `<button class="bfilter${filtroBadge===b.k?' active':''}" onclick="setBadgeFilter('${b.k}')" title="${esc(b.d)}">${b.emoji} ${esc(b.n)} <span>${cuenta[b.k]}</span></button>`
+ ).join('')}${filtroBadge?`<button class="bfilter clear" onclick="setBadgeFilter('')">Ver todas</button>`:''}</div>`}
+
+function renderRecipes(){const q=(($('#recipeSearch')||{}).value||'').toLowerCase().trim();const idx=ingredientsById();
+const list=data.recipes.filter(r=>(!q||(r.name||'').toLowerCase().includes(q))&&
+ (!filtroBadge||recipeBadges(r,idx).badges.some(b=>b.k===filtroBadge)));
+const el=$('#recipesList');
+const fr=$('#badgeFilters');if(fr)fr.innerHTML=badgeFilterRow();el.innerHTML=list.length?list.map(r=>{const c=recipeCost(r),u=recipeUnitCost(r),p=recipePrice(r),m=recipeMargin(r),cls=!p?'warn':m>=60?'ok':m>=45?'warn':'bad';return `<article class="recipe">${r.photo?`<img class="recipe-photo" src="${esc(r.photo)}" alt="${esc(r.name)}" loading="lazy">`:''}<span class="tag">${esc(r.yield)} porciones</span><h3>${esc(r.name)}</h3><small>${(r.ingredients||[]).length} ingredientes · costo por porción ${money(u)}</small><div class="recipe-data"><div><span>Costo total</span><b>${money(c)}</b></div><div><span>Precio / porción</span><b>${money(p)}</b></div></div><span class="badge ${cls}">${p?`Ganas ${m.toFixed(0)}% de cada venta`:'Falta ponerle precio'}</span>${p&&m<60?`<p class="helper">Cobrando <b>${money(suggestPrice(r))}</b> ganarías más</p>`:''}${macroSummary(r)}${badgeRow(r)}<div class="recipe-actions"><button onclick="openRecipe('${r.id}')">Editar</button><button onclick="duplicateRecipe('${r.id}')">Duplicar</button><button onclick="quickFromRecipe('${r.id}')">Calcular precio</button><button class="negative" onclick="removeItem('recipes','${r.id}')">Eliminar</button></div></article>`}).join(''):`<div class="empty">${q?'Ninguna receta coincide con tu búsqueda.':'Crea tu primer postre y calcula en un minuto cuánto cobrar.'}</div>`}
 function duplicateRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;data.recipes.push(sello({...r,id:crypto.randomUUID(),name:r.name+' (copia)',ingredients:(r.ingredients||[]).map(i=>({...i}))}));save('Receta duplicada')}
 function quickFromRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;go('recipes');$('#quickCost').value=recipeUnitCost(r).toFixed(2);quickCalc();$('#quickCost').scrollIntoView({behavior:'smooth',block:'center'});toast('Listo: costo de una porción de '+r.name)}
 function renderTables(){
@@ -333,6 +353,14 @@ const ingredientsById=()=>{const m={};data.ingredients.forEach(i=>{m[i.id]=i});r
  * Si faltan ingredientes por cubrir se dice cuántos. Enseñar "320 kcal" a secas
  * cuando la mitad de la receta no tiene datos sería un número creíble y falso.
  */
+// Las etiquetas sólo salen con la receta completa; si faltan datos se explica
+// por qué en vez de dejar el hueco sin más.
+function badgeRow(r){const out=recipeBadges(r,ingredientsById());
+ if(out.badges.length)return `<div class="badges">${out.badges.map(b=>
+  `<span class="dbadge" title="${esc(b.d)}">${b.emoji} ${esc(b.n)}</span>`).join('')}</div>`;
+ if(out.motivo==='faltan-datos')return `<p class="badges-hint">Añade la información nutricional de todos los ingredientes para ver etiquetas como “Sin azúcar” o “Keto”.</p>`;
+ return ''}
+
 function macroSummary(r){const m=recipeMacros(r,ingredientsById());
  if(!m.contadas)return '';
  const p=m.perServing;

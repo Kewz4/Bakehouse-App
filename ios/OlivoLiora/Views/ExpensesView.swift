@@ -50,11 +50,9 @@ struct ExpensesView: View {
                 .panelCard()
                 .contentShape(Rectangle())
                 .onTapGesture { editing = expense }
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        store.delete(id: expense.id, from: .expenses)
-                    } label: { Label("Borrar", systemImage: "trash") }
-                }
+                .plainRow()
+                .rowActions(onEdit: { editing = expense },
+                            onDelete: { store.delete(id: expense.id, from: .expenses) })
             }
         }
         .sheet(isPresented: $creating) { ExpenseEditor(expense: nil) }

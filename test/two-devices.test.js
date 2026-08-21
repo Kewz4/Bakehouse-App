@@ -342,3 +342,55 @@ test('la receta muestra los macros por porción y avisa si faltan ingredientes',
     assert.ok(/1 de 2 ingredientes/.test(line), 'debe avisar de la cobertura: ' + line);
   } finally { await d.close(); }
 });
+
+test('una receta completa muestra sus etiquetas de dieta y se puede filtrar', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => {
+      data.ingredients.push(sello({ id: 'alm', name: 'Harina de almendra', unit: 'bolsa',
+        quantity: 1, price: 8, unitSingle: 'kg',
+        macros: { calorias: 579, proteina: 21, carbohidratos: 22, azucar: 4,
+                  grasa: 50, grasaSaturada: 4, fibra: 12, sodioMg: 1 } }));
+      data.ingredients.push(sello({ id: 'hv', name: 'Huevos', unit: 'caja',
+        quantity: 12, price: 2.4, unitSingle: 'u',
+        macros: { calorias: 78, proteina: 6, carbohidratos: 0.6, azucar: 0.6,
+                  grasa: 5, grasaSaturada: 1.6, fibra: 0, sodioMg: 62 } }));
+      // Completa: lleva etiquetas.
+      data.recipes.push(sello({ id: 'keto', name: 'Pan keto', yield: 8, price: 3,
+        ingredients: [{ ingredientId: 'alm', qty: 200, unit: 'g', cost: 0 },
+                      { ingredientId: 'hv', qty: 3, unit: 'u', cost: 0 }] }));
+      // Incompleta: NO debe llevar ninguna.
+      data.recipes.push(sello({ id: 'incompleta', name: 'Pastel misterioso', yield: 4, price: 2,
+        ingredients: [{ ingredientId: 'alm', qty: 100, unit: 'g', cost: 0 },
+                      { ingredientId: 'nada', qty: 1, unit: 'u', cost: 0 }] }));
+      save(); go('recipes');
+    });
+    await d.page.waitForSelector('.dbadge', { timeout: 10000 });
+
+    const badges = await d.page.evaluate(() =>
+      [...document.querySelectorAll('.recipe')].map(card => ({
+        name: card.querySelector('h3').textContent,
+        badges: [...card.querySelectorAll('.dbadge')].map(b => b.textContent.trim())
+      })));
+
+    const keto = badges.find(b => b.name === 'Pan keto');
+    assert.ok(keto.badges.some(t => /Keto/.test(t)), 'esperaba Keto: ' + keto.badges);
+    assert.ok(keto.badges.some(t => /Paleo/.test(t)), '"harina de almendra" es paleo');
+
+    const incompleta = badges.find(b => b.name === 'Pastel misterioso');
+    assert.deepEqual(incompleta.badges, [],
+      'una receta con datos incompletos no debe llevar ninguna etiqueta');
+
+    // Filtrar por Keto deja sólo la que la tiene.
+    await d.page.evaluate(() => setBadgeFilter('keto'));
+    await d.page.waitForFunction(
+      () => document.querySelectorAll('.recipe').length === 1, null, { timeout: 10000 });
+    assert.equal(await d.page.textContent('.recipe h3'), 'Pan keto');
+
+    // Y quitar el filtro las devuelve todas.
+    await d.page.evaluate(() => setBadgeFilter('keto'));
+    await d.page.waitForFunction(
+      () => document.querySelectorAll('.recipe').length === 2, null, { timeout: 10000 });
+    assert.deepEqual(d.errors, []);
+  } finally { await d.close(); }
+});

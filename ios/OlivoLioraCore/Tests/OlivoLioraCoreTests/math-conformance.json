@@ -263,6 +263,217 @@
       "out": 5
     }
   ],
+  "macroIngredients": {
+    "harina": {
+      "id": "harina",
+      "quantity": 5,
+      "unitSingle": "lb",
+      "price": 6.5,
+      "macros": {
+        "calorias": 380,
+        "proteina": 11,
+        "carbohidratos": 72,
+        "azucar": 1.5,
+        "grasa": 1.2,
+        "grasaSaturada": 0.2,
+        "fibra": 2.7,
+        "sodioMg": 2
+      }
+    },
+    "azucar": {
+      "id": "azucar",
+      "quantity": 2,
+      "unitSingle": "kg",
+      "price": 3,
+      "macros": {
+        "calorias": 400,
+        "proteina": 0,
+        "carbohidratos": 100,
+        "azucar": 100,
+        "grasa": 0,
+        "grasaSaturada": 0,
+        "fibra": 0,
+        "sodioMg": 0
+      }
+    },
+    "leche": {
+      "id": "leche",
+      "quantity": 1,
+      "unitSingle": "l",
+      "price": 1.15,
+      "macros": {
+        "calorias": 61,
+        "proteina": 3.2,
+        "carbohidratos": 4.8,
+        "azucar": 4.8,
+        "grasa": 3.3,
+        "grasaSaturada": 1.9,
+        "fibra": null,
+        "sodioMg": 43
+      }
+    },
+    "huevos": {
+      "id": "huevos",
+      "quantity": 12,
+      "unitSingle": "u",
+      "price": 2.4
+    }
+  },
+  "macroRecipes": [
+    {
+      "in": {
+        "name": "todo cubierto",
+        "yield": 10,
+        "ingredients": [
+          {
+            "ingredientId": "harina",
+            "qty": 500,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "azucar",
+            "qty": 0.2,
+            "unit": "kg"
+          }
+        ]
+      },
+      "totals": {
+        "calorias": 2700,
+        "proteina": 55,
+        "carbohidratos": 560,
+        "azucar": 207.5,
+        "grasa": 6,
+        "grasaSaturada": 1,
+        "fibra": 13.500000000000002,
+        "sodioMg": 10
+      },
+      "perServing": {
+        "calorias": 270,
+        "proteina": 5.5,
+        "carbohidratos": 56,
+        "azucar": 20.75,
+        "grasa": 0.6,
+        "grasaSaturada": 0.1,
+        "fibra": 1.35,
+        "sodioMg": 1
+      },
+      "contadas": 2,
+      "total": 2,
+      "completo": true
+    },
+    {
+      "in": {
+        "name": "cobertura parcial",
+        "yield": 8,
+        "ingredients": [
+          {
+            "ingredientId": "harina",
+            "qty": 250,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "huevos",
+            "qty": 3,
+            "unit": "u"
+          },
+          {
+            "ingredientId": "nada",
+            "qty": 1,
+            "unit": "u"
+          }
+        ]
+      },
+      "totals": {
+        "calorias": 950,
+        "proteina": 27.5,
+        "carbohidratos": 180,
+        "azucar": 3.75,
+        "grasa": 3,
+        "grasaSaturada": 0.5,
+        "fibra": 6.750000000000001,
+        "sodioMg": 5
+      },
+      "perServing": {
+        "calorias": 118.75,
+        "proteina": 3.4375,
+        "carbohidratos": 22.5,
+        "azucar": 0.46875,
+        "grasa": 0.375,
+        "grasaSaturada": 0.0625,
+        "fibra": 0.8437500000000001,
+        "sodioMg": 0.625
+      },
+      "contadas": 1,
+      "total": 3,
+      "completo": false
+    },
+    {
+      "in": {
+        "name": "volumen en tazas",
+        "yield": 4,
+        "ingredients": [
+          {
+            "ingredientId": "leche",
+            "qty": 2,
+            "unit": "taza"
+          }
+        ]
+      },
+      "totals": {
+        "calorias": 292.8,
+        "proteina": 15.36,
+        "carbohidratos": 23.04,
+        "azucar": 23.04,
+        "grasa": 15.84,
+        "grasaSaturada": 9.12,
+        "fibra": 0,
+        "sodioMg": 206.4
+      },
+      "perServing": {
+        "calorias": 73.2,
+        "proteina": 3.84,
+        "carbohidratos": 5.76,
+        "azucar": 5.76,
+        "grasa": 3.96,
+        "grasaSaturada": 2.28,
+        "fibra": 0,
+        "sodioMg": 51.6
+      },
+      "contadas": 1,
+      "total": 1,
+      "completo": true
+    },
+    {
+      "in": {
+        "name": "sin ingredientes",
+        "yield": 1,
+        "ingredients": []
+      },
+      "totals": {
+        "calorias": 0,
+        "proteina": 0,
+        "carbohidratos": 0,
+        "azucar": 0,
+        "grasa": 0,
+        "grasaSaturada": 0,
+        "fibra": 0,
+        "sodioMg": 0
+      },
+      "perServing": {
+        "calorias": 0,
+        "proteina": 0,
+        "carbohidratos": 0,
+        "azucar": 0,
+        "grasa": 0,
+        "grasaSaturada": 0,
+        "fibra": 0,
+        "sodioMg": 0
+      },
+      "contadas": 0,
+      "total": 0,
+      "completo": false
+    }
+  ],
   "recipe": [
     {
       "in": {

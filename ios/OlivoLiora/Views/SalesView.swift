@@ -31,11 +31,9 @@ struct SalesView: View {
                 SaleRow(sale: sale, profit: store.profit(of: sale))
                     .contentShape(Rectangle())
                     .onTapGesture { editing = sale }
-                    .swipeActions(edge: .trailing) {
-                        Button(role: .destructive) {
-                            store.delete(id: sale.id, from: .sales)
-                        } label: { Label("Borrar", systemImage: "trash") }
-                    }
+                    .plainRow()
+                    .rowActions(onEdit: { editing = sale },
+                                onDelete: { store.delete(id: sale.id, from: .sales) })
             }
         }
         .sheet(isPresented: $creating) { SaleEditor(sale: nil) }

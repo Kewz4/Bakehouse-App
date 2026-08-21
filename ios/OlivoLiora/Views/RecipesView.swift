@@ -17,38 +17,46 @@ struct RecipesView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                BrandHeader(subtitle: "Recetas y precios")
-                SectionHeading(eyebrow: "Tus postres", title: "Recetas & precios")
-
+        // `List` y no `ScrollView`: `.swipeActions` sólo tiene efecto dentro de
+        // una List. La calculadora y los consejos son filas más, sin adornos.
+        List {
+            Group {
+                VStack(alignment: .leading, spacing: 14) {
+                    BrandHeader(subtitle: "Recetas y precios")
+                    SectionHeading(eyebrow: "Tus postres", title: "Recetas & precios")
+                }
                 if filtered.isEmpty {
                     EmptyHint(text: search.isEmpty
                         ? "Crea tu primer postre y calcula en un minuto cuánto cobrar."
                         : "Ninguna receta coincide con tu búsqueda.")
-                } else {
-                    LazyVStack(spacing: 12) {
-                        ForEach(filtered) { recipe in
-                            RecipeCard(
-                                recipe: recipe,
-                                onEdit: { editing = recipe },
-                                onDuplicate: { store.duplicate(recipe) },
-                                onUseInCalculator: {
-                                    calcCost = String(format: "%.2f", recipe.unitCost)
-                                },
-                                onDelete: { store.delete(id: recipe.id, from: .recipes) })
-                        }
-                    }
                 }
+            }
+            .plainRow()
 
+            ForEach(filtered) { recipe in
+                RecipeCard(
+                    recipe: recipe,
+                    macros: store.macros(of: recipe),
+                    onDuplicate: { store.duplicate(recipe) },
+                    onUseInCalculator: {
+                        calcCost = String(format: "%.2f", recipe.unitCost)
+                    })
+                    .contentShape(Rectangle())
+                    .onTapGesture { editing = recipe }
+                    .plainRow()
+                    .rowActions(onEdit: { editing = recipe },
+                                onDelete: { store.delete(id: recipe.id, from: .recipes) })
+            }
+
+            Group {
                 PriceCalculatorPanel(cost: $calcCost, percent: $calcPercent, mode: $calcMode)
-                    .padding(.top, 6)
-
                 TipsPanel()
             }
-            .padding(.horizontal, 16)
-            .padding(.bottom, 96)
+            .plainRow(vertical: 8)
         }
+        .listStyle(.plain)
+        .environment(\.defaultMinListRowHeight, 0)
+        .scrollContentBackground(.hidden)
         .background(Theme.cream)
         .scrollIndicators(.hidden)
         .searchable(text: $search, prompt: "Buscar receta…")
@@ -65,12 +73,9 @@ struct RecipesView: View {
 
 struct RecipeCard: View {
     let recipe: Recipe
-    let onEdit: () -> Void
+    let macros: RecipeMacros
     let onDuplicate: () -> Void
     let onUseInCalculator: () -> Void
-    let onDelete: () -> Void
-
-    @State private var confirmDelete = false
 
     /// El color del distintivo dice de un vistazo si el precio está bien:
     /// verde a partir del 60% de margen, ámbar entre 45 y 60, rojo por debajo.
@@ -127,19 +132,23 @@ struct RecipeCard: View {
                         .foregroundStyle(Theme.muted)
                 }
 
+                // Sólo aparece si hay datos nutricionales, y dice cuántos
+                // ingredientes pudo contar cuando faltan.
+                if let sentence = macros.sentence {
+                    Text(sentence)
+                        .font(Theme.rounded(12, .bold))
+                        .foregroundStyle(Theme.green)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 10).padding(.vertical, 7)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Color(hex: 0xEEF4EA),
+                                    in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+
                 HStack(spacing: 4) {
-                    cardAction("Editar", action: onEdit)
                     cardAction("Duplicar", action: onDuplicate)
-                    cardAction("Calcular", action: onUseInCalculator)
+                    cardAction("Calcular precio", action: onUseInCalculator)
                     Spacer()
-                    Button { confirmDelete = true } label: {
-                        Image(systemName: "trash")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.red)
-                            .padding(8)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Borrar receta")
                 }
                 .padding(.top, 2)
             }
@@ -150,7 +159,6 @@ struct RecipeCard: View {
             .stroke(Theme.line, lineWidth: 1))
         .clipShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         .shadow(color: .black.opacity(0.04), radius: 12, y: 6)
-        .deleteConfirm(isPresented: $confirmDelete, what: "«\(recipe.name)»", onDelete: onDelete)
     }
 
     private func miniStat(_ caption: String, _ value: String) -> some View {

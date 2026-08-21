@@ -30,6 +30,22 @@ final class MathConformanceTests: XCTestCase {
             let `in`: Input
             let totalCost: Double, unitCost: Double, margin: Double, suggested: Double
         }
+        struct MacroRecipeCase: Decodable {
+            struct Line: Decodable {
+                let ingredientId: String?; let qty: Double; let unit: String
+            }
+            struct Input: Decodable {
+                let name: String; let yield: Double; let ingredients: [Line]
+            }
+            let `in`: Input
+            let totals: [String: Double]
+            let perServing: [String: Double]
+            let contadas: Int
+            let total: Int
+            let completo: Bool
+        }
+        let macroIngredients: [String: JSONValue]
+        let macroRecipes: [MacroRecipeCase]
         let parseQty: [ParseCase]
         let prettyQty: [PrettyCase]
         let baseCost: [IngredientCase]
@@ -80,5 +96,65 @@ final class MathConformanceTests: XCTestCase {
             XCTAssertEqual(r.margin, c.margin, accuracy: 1e-9, "«\(c.in.name)» margen")
             XCTAssertEqual(r.suggestedPrice(), c.suggested, accuracy: 1e-9, "«\(c.in.name)» precio sugerido")
         }
+    }
+
+    /// Los macros de una receta tienen que sumar igual en los dos lados.
+    /// Una diferencia aquí no rompe nada: sólo hace que el teléfono y la laptop
+    /// muestren distinta azúcar para el mismo postre.
+    func testRecipeMacrosMatchJavaScript() throws {
+        let f = try load()
+
+        // Los ingredientes vienen tal cual del lado JavaScript.
+        var ingredients: [String: Ingredient] = [:]
+        for (id, raw) in f.macroIngredients {
+            guard let obj = raw.objectValue else { continue }
+            var rec = Record(obj)
+            rec.id = id
+            ingredients[id] = Ingredient(record: rec)
+        }
+        XCTAssertFalse(ingredients.isEmpty, "no se cargaron los ingredientes de prueba")
+
+        for c in f.macroRecipes {
+            let lines = c.in.ingredients.map {
+                RecipeLine(ingredientId: $0.ingredientId, name: "x",
+                           qty: $0.qty, unit: $0.unit, cost: 0)
+            }
+            let recipe = Recipe(name: c.in.name, yield: c.in.yield, price: 0, lines: lines)
+            let got = Analytics.macros(for: recipe, ingredients: ingredients)
+
+            XCTAssertEqual(got.counted, c.contadas, "«\(c.in.name)» ingredientes contados")
+            XCTAssertEqual(got.total, c.total, "«\(c.in.name)» ingredientes totales")
+            XCTAssertEqual(got.isComplete, c.completo, "«\(c.in.name)» cobertura completa")
+
+            for m in Macro.allCases {
+                XCTAssertEqual(got.totals[m] ?? 0, c.totals[m.rawValue] ?? 0, accuracy: 1e-9,
+                               "«\(c.in.name)» total de \(m.rawValue)")
+                XCTAssertEqual(got.perServing[m] ?? 0, c.perServing[m.rawValue] ?? 0, accuracy: 1e-9,
+                               "«\(c.in.name)» por porción de \(m.rawValue)")
+            }
+        }
+    }
+
+    /// Un dato que la etiqueta no trae se queda en nil, no en cero. Guardarlo
+    /// como cero diría que el producto no tiene fibra, que es otra cosa.
+    func testMissingMacroStaysNilNotZero() {
+        var ing = Ingredient(name: "Leche", unit: "botella", quantity: 1,
+                             price: 1.15, unitSingle: "l")
+        ing.setMacro(.calorias, 61)
+        ing.setMacro(.fibra, nil)
+        XCTAssertEqual(ing.macro(.calorias), 61)
+        XCTAssertNil(ing.macro(.fibra))
+        XCTAssertTrue(ing.hasMacros)
+
+        // Un cero explícito sí es un dato.
+        var azucar = Ingredient(name: "Azúcar", unit: "bolsa", quantity: 1,
+                                price: 1, unitSingle: "kg")
+        azucar.setMacro(.grasa, 0)
+        XCTAssertEqual(azucar.macro(.grasa), 0)
+        XCTAssertTrue(azucar.hasMacros)
+
+        // Y quitar el último dato deja el ingrediente sin macros del todo.
+        azucar.setMacro(.grasa, nil)
+        XCTAssertFalse(azucar.hasMacros)
     }
 }
