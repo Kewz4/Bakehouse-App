@@ -116,23 +116,32 @@ empiezan a discrepar en silencio, que es la peor forma de fallar.
 Para evitarlo:
 
 ```bash
-node test/make-conformance-fixtures.js
+npm run fixtures
 ```
 
-genera casos de combinación **y el resultado exacto que produce el motor de
-JavaScript**. Una prueba de Swift los replica con su propio motor y exige el
-mismo texto, carácter por carácter. CI falla si los casos están desactualizados.
+genera casos **y el resultado exacto que produce el lado de JavaScript**, para
+las dos cosas que están escritas dos veces:
+
+- la combinación (`sync-core.js` ↔ `MergeEngine.swift`), comparando el documento
+  resultante carácter por carácter;
+- las cuentas (`business-core.js` ↔ `Units.swift`, `Domain.swift`): 35 cantidades
+  escritas a mano como "media taza" o "1 ½", 16 formatos de número, costos por
+  unidad base y recetas completas.
+
+Una prueba de Swift los replica con su propio código y exige lo mismo. CI falla
+si los casos están desactualizados, así que no se puede cambiar una regla en un
+solo lado sin enterarse.
 
 ---
 
 ## Pruebas
 
 ```bash
-npm test          # motor de combinación + endpoint /api/data (23 pruebas)
-npm run test:e2e  # dos navegadores contra un servidor (7 pruebas)
+npm test          # motor de combinación + endpoint /api/data (26 pruebas)
+npm run test:e2e  # dos navegadores contra un servidor (8 pruebas)
 npm run dev       # servidor local en :4321 con sincronización en memoria
 
-cd ios/OlivoLioraCore && swift test   # núcleo de iOS (17 pruebas)
+cd ios/OlivoLioraCore && swift test   # núcleo de iOS (21 pruebas)
 ```
 
 `test/two-devices.test.js` es la que corresponde a lo que se pidió: levanta la
