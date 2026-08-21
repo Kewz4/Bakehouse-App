@@ -354,3 +354,34 @@ test('una etiqueta con muchos ceros sigue siendo válida', () => {
   assert.ok(Math.abs(out.macros.azucar - 80.95) < 0.01);
   assert.equal(out.macros.grasa, 0);
 });
+
+// --- Textos de cabecera -----------------------------------------------------
+// Estos no mueven ningún precio, pero son lo que se lee bajo el título de cada
+// pantalla, y están escritos también en Swift. Aquí se fija el comportamiento;
+// la conformidad con Swift la comprueba math-conformance.json.
+
+test('el recuento de una pantalla dice singular o plural según toque', () => {
+  assert.equal(B.countLabel(1, 1, 'receta', 'recetas'), '1 receta');
+  assert.equal(B.countLabel(2, 2, 'receta', 'recetas'), '2 recetas');
+  assert.equal(B.countLabel(8, 8, 'guardado', 'guardados'), '8 guardados');
+});
+
+test('con una búsqueda encima el recuento dice cuántas de cuántas', () => {
+  assert.equal(B.countLabel(3, 8, 'guardado', 'guardados'), '3 de 8');
+  assert.equal(B.countLabel(0, 40, 'gasto', 'gastos'), '0 de 40');
+});
+
+test('en una pantalla vacía no se escribe nada', () => {
+  // Debajo va el mensaje que dice qué hacer; un "0 recetas" encima estorba.
+  assert.equal(B.countLabel(0, 0, 'receta', 'recetas'), null);
+  assert.equal(B.countLabel(5, -1, 'venta', 'ventas'), null);
+});
+
+test('los trozos de la cabecera se juntan saltándose los que faltan', () => {
+  assert.equal(B.joinDetail(['Este mes', '12 ventas']), 'Este mes · 12 ventas');
+  assert.equal(B.joinDetail(['Este mes', null]), 'Este mes');
+  assert.equal(B.joinDetail([null, '12 ventas']), '12 ventas');
+  assert.equal(B.joinDetail(['Este mes', '']), 'Este mes');
+  assert.equal(B.joinDetail([null, null]), null);
+  assert.equal(B.joinDetail([]), null);
+});

@@ -9,25 +9,23 @@ struct DashboardView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
-                BrandHeader(subtitle: store.period.label)
+                // El único sitio de toda la app donde aparece el nombre: es la
+                // pantalla de inicio. Antes estaba aquí arriba, otra vez en el
+                // saludo ("Así va Olivo & Liora") y una tercera en la cabecera
+                // de cada una de las otras pestañas. Ella ya sabe qué app abrió.
+                ScreenHeader(title: "Hola, Camila.", detail: nil)
 
-                VStack(alignment: .leading, spacing: 6) {
-                    Eyebrow(text: "Tu negocio, de un vistazo")
-                    Text("Hola, Camila.\nAsí va Olivo & Liora.")
-                        .font(Theme.title(30))
-                        .foregroundStyle(Theme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+                UpdateBanner()
 
                 periodPicker
 
                 metricsGrid
 
-                panel(eyebrow: "Ventas", title: "Cuánto vendiste por mes") {
+                panel(title: "Cuánto vendiste por mes") {
                     MonthlyChart(bars: store.monthlyBars)
                 }
 
-                panel(eyebrow: "Tus números", title: "Un resumen rápido") {
+                panel(title: "Un resumen rápido") {
                     let m = store.metrics
                     VStack(spacing: 0) {
                         DotRow(title: "Venta promedio", subtitle: "Cuánto deja cada venta",
@@ -45,7 +43,7 @@ struct DashboardView: View {
                     }
                 }
 
-                panel(eyebrow: "Para ti", title: "Ideas para ganar más") {
+                panel(title: "Ideas para ganar más") {
                     let alerts = store.alerts
                     if alerts.isEmpty {
                         EmptyHint(text: "¡Todo va en orden! Sigue registrando tu actividad.")
@@ -58,7 +56,7 @@ struct DashboardView: View {
                     }
                 }
 
-                panel(eyebrow: "Ranking", title: "Productos más vendidos") {
+                panel(title: "Productos más vendidos") {
                     let top = store.topProducts
                     if top.isEmpty {
                         EmptyHint(text: "Registra ventas para ver tu ranking de productos.")
@@ -88,14 +86,9 @@ struct DashboardView: View {
 
         return VStack(alignment: .leading, spacing: 12) {
             HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("¿Qué quieres ver?")
-                        .font(Theme.rounded(15, .bold))
-                        .foregroundStyle(Theme.ink)
-                    Text("Elige un período y todo se actualiza")
-                        .font(Theme.rounded(12))
-                        .foregroundStyle(Theme.muted)
-                }
+                Text("¿Qué quieres ver?")
+                    .font(Theme.rounded(15, .bold))
+                    .foregroundStyle(Theme.ink)
                 Spacer()
                 Picker("Período", selection: $store.period) {
                     ForEach(Period.allCases) { p in Text(p.label).tag(p) }
@@ -138,13 +131,10 @@ struct DashboardView: View {
     }
 
     @ViewBuilder
-    private func panel<Content: View>(eyebrow: String, title: String,
+    private func panel<Content: View>(title: String,
                                       @ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Eyebrow(text: eyebrow)
-                Text(title).font(Theme.title(21)).foregroundStyle(Theme.ink)
-            }
+            Text(title).font(Theme.title(21)).foregroundStyle(Theme.ink)
             content()
         }
         .frame(maxWidth: .infinity, alignment: .leading)

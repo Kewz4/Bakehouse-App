@@ -240,17 +240,81 @@ los datos que ya existían no se pierden al actualizar.
 
 ## La app de iPhone
 
-### Construir el `.ipa`
+### Construir, firmar y publicar el `.ipa`
 
-CI lo hace en cada push a `ios/`:
-
-**Actions → App de iPhone → artefacto `OlivoLiora-unsigned-ipa`**
-
-Sale **sin firmar**, con la estructura `Payload/OlivoLiora.app` que espera
-KravaSign. También se puede lanzar a mano desde *Actions → Run workflow*.
+CI lo hace en cada push a `ios/`. Si los certificados están cargados como
+secretos, el `.ipa` sale **firmado** y se publica solo en una Release; si no
+están, sale sin firmar y sólo sirve para comprobar que todo compila.
 
 El runner compila con **Xcode 26.6 / SDK iPhoneOS 26.5**, así que Liquid Glass
 va incluido de verdad (no es el camino alternativo). Pesa ~550 kB.
+
+#### Los tres secretos
+
+En *Settings → Secrets and variables → Actions*:
+
+| Secreto | Qué es |
+|---|---|
+| `IOS_P12_BASE64` | el `.p12` de distribución, en base64 |
+| `IOS_P12_PASSWORD` | la contraseña con la que se exportó ese `.p12` |
+| `IOS_MOBILEPROVISION_BASE64` | el perfil **ad-hoc**, en base64 |
+
+Para sacar el base64, en un Mac:
+
+```bash
+base64 -i cert.p12            | pbcopy   # → IOS_P12_BASE64
+base64 -i perfil.mobileprovision | pbcopy # → IOS_MOBILEPROVISION_BASE64
+```
+
+Los archivos en sí **no van al repositorio**: un `.p12` lleva dentro la clave
+privada con la que se firma, y este repositorio es público.
+
+El perfil tiene que ser el de distribución ad-hoc (`get-task-allow: false`), no
+el de desarrollo. El de desarrollo también firma, pero produce una app que sólo
+arranca con Xcode conectado.
+
+#### De dónde sale el identificador de la app
+
+Del propio perfil, no de `project.yml`. El workflow lo lee con
+`ios/read-profile.py` y se lo pasa a `xcodebuild`.
+
+Importa porque **iOS decide por el identificador si actualiza la app que ya está
+instalada o si instala una segunda al lado**. Si no coincide, ella acabaría con
+dos iconos iguales y los datos del teléfono en el que ya no entra. Por eso
+`project.yml` lleva el mismo valor escrito (`app.gorilla3597.nadir5999`) y el
+paso de firma comprueba que lo que salió coincide con lo que el perfil dice.
+
+### Que se actualice sola
+
+Ella no reinstala nada. Cada compilación firmada se publica en una Release y el
+teléfono la recoge:
+
+```
+GitHub Release  ──►  /api/app-version  ──►  la app compara el número de compilación
+     │                                              │
+     │                                        ¿hay uno mayor?
+     │                                              ▼
+     └──────────►  /instalar/olivo-liora.plist  ◄── botón "Actualizar"
+                          (itms-services)
+```
+
+* **`/api/app-version`** lee `version.json` de la última Release y dice qué hay.
+* **`/instalar/olivo-liora.plist`** es el archivo que iOS necesita para
+  instalar; apunta al `.ipa` de la Release.
+* **`/instalar.html`** es la página para la **primera** instalación, la única
+  vez que hace falta abrir algo en Safari.
+
+La comparación se hace sobre `CFBundleVersion`, que es el número de la
+ejecución del workflow y sube siempre. Comparar enteros no tiene casos raros;
+comparar `"1.10"` contra `"1.9"` sí.
+
+Ninguna de las dos direcciones usa la API de GitHub: `releases/latest/download/`
+es una dirección fija y sin límite de peticiones, mientras que la API sin
+credenciales corta a las 60 por hora **por IP**, y las IP de Vercel son
+compartidas. Tampoco hay ninguna llave guardada en el servidor para esto.
+
+En la app son dos cosas y nada más: una frase y un botón. Sin número de
+versión, sin notas de la versión, sin ajuste que buscar.
 
 En local (hace falta un Mac):
 
@@ -329,10 +393,13 @@ index.html  app.js  styles.css  sw.js      la PWA
 sync-core.js                               la regla de combinación (web + servidor)
 api/data.js                                lee, combina y guarda
 api/upload.js                              fotos
+api/app-version.js  api/manifest.js        qué versión hay y cómo instalarla
+instalar.html                              la página de la primera instalación
 test/                                       pruebas de web y sincronización
 ios/OlivoLioraCore/                         núcleo sin SwiftUI (compila en Linux)
 ios/OlivoLiora/                             la app SwiftUI
 ios/project.yml                             el .xcodeproj se genera con XcodeGen
+ios/read-profile.py                         lee el identificador del perfil de firma
 ```
 
 El `.xcodeproj` no se guarda en el repositorio: el formato `.pbxproj` es

@@ -141,6 +141,30 @@ const badgeRecipes = [
   { name: 'sin ingredientes', yield: 1, ingredients: [] }
 ];
 
+// Los textos de cabecera ("8 guardados", "3 de 8") también están escritos en los
+// dos sitios. No cambian ningún precio, pero sí hacen que la misma pantalla se
+// lea distinta en el teléfono y en la laptop, que es justo lo que no queremos.
+const countCases = [
+  { shown: 0,  total: 0,  singular: 'receta',   plural: 'recetas' },
+  { shown: 0,  total: 1,  singular: 'receta',   plural: 'recetas' },
+  { shown: 1,  total: 1,  singular: 'receta',   plural: 'recetas' },
+  { shown: 2,  total: 2,  singular: 'venta',    plural: 'ventas' },
+  { shown: 3,  total: 8,  singular: 'guardado', plural: 'guardados' },
+  { shown: 8,  total: 8,  singular: 'guardado', plural: 'guardados' },
+  { shown: 12, total: 12, singular: 'gasto',    plural: 'gastos' },
+  { shown: 0,  total: 40, singular: 'gasto',    plural: 'gastos' },
+  { shown: 5,  total: -1, singular: 'venta',    plural: 'ventas' }
+];
+
+const joinCases = [
+  ['Este mes', '12 ventas'],
+  ['Este mes', null],
+  [null, '12 ventas'],
+  [null, null],
+  ['Este mes', ''],
+  ['Hoy', '1 gasto', '']
+];
+
 const out = {
   parseQty: quantities.map(q => ({ in: q, out: B.parseQty(q) })),
   prettyQty: prettyInputs.map(n => ({ in: n, out: B.prettyQty(n) })),
@@ -162,6 +186,11 @@ const out = {
     return { in: r, totals: m.totals, perServing: m.perServing,
              contadas: m.contadas, total: m.total, completo: m.completo };
   }),
+  countLabel: countCases.map(c => ({
+    in: c,
+    out: B.countLabel(c.shown, c.total, c.singular, c.plural)
+  })),
+  joinDetail: joinCases.map(parts => ({ in: parts, out: B.joinDetail(parts) })),
   recipe: recipes.map(r => ({
     in: r,
     totalCost: B.recipeCost(r),
@@ -175,4 +204,5 @@ fs.writeFileSync(OUT, JSON.stringify(out, null, 2) + '\n');
 console.log('parseQty:%d prettyQty:%d baseCost:%d recipe:%d macroRecipes:%d -> %s',
   out.parseQty.length, out.prettyQty.length, out.baseCost.length, out.recipe.length,
   out.macroRecipes.length, path.relative(process.cwd(), OUT));
-console.log('badgeRecipes:%d', out.badgeRecipes.length);
+console.log('badgeRecipes:%d countLabel:%d joinDetail:%d',
+  out.badgeRecipes.length, out.countLabel.length, out.joinDetail.length);

@@ -9,6 +9,7 @@ enum Config {
     static var dataURL: URL { baseURL.appendingPathComponent("api/data") }
     static var uploadURL: URL { baseURL.appendingPathComponent("api/upload") }
     static var visionURL: URL { baseURL.appendingPathComponent("api/vision") }
+    static var versionURL: URL { baseURL.appendingPathComponent("api/app-version") }
 }
 
 /// Lo único que ella llega a ver sobre la sincronización.
@@ -178,6 +179,41 @@ actor SyncClient {
                          macros: env.macros ?? [:],
                          confianza: env.confianza ?? "media",
                          mensaje: env.mensaje)
+    }
+
+    // MARK: - Actualizarse sola
+
+    struct LatestVersion: Sendable {
+        let build: Int
+        /// El enlace `itms-services://` que hace que iOS instale la app.
+        let install: String
+    }
+
+    private struct VersionEnvelope: Decodable {
+        let disponible: Bool?
+        let build: Int?
+        let instalar: String?
+    }
+
+    /// Qué versión hay publicada. `nil` si no hay ninguna o no hay señal: en
+    /// ambos casos la app se queda como está y no enseña nada.
+    func latestVersion() async -> LatestVersion? {
+        var req = URLRequest(url: Config.versionURL)
+        req.httpMethod = "GET"
+        req.cachePolicy = .reloadIgnoringLocalCacheData
+        // Esto es lo menos urgente que hace la app: si tarda, que no le quite
+        // tiempo a la sincronización, que es lo que sí importa.
+        req.timeoutInterval = 15
+
+        guard let (data, response) = try? await session.data(for: req),
+              (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? true,
+              let env = try? JSONDecoder().decode(VersionEnvelope.self, from: data),
+              env.disponible == true,
+              let build = env.build,
+              let install = env.instalar
+        else { return nil }
+
+        return LatestVersion(build: build, install: install)
     }
 
     private func check(_ response: URLResponse) throws {

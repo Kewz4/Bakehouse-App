@@ -310,6 +310,28 @@ function recipeBadges(r,ingredientsById){
 
  return {badges:out,motivo:out.length?null:'ninguna',macros:m}}
 
+// ---------------------------------------------------------------------------
+// Textos de cabecera
+// ---------------------------------------------------------------------------
+// La regla de las pantallas es que el nombre se escribe UNA vez, y lo que va
+// debajo tiene que aportar algo que el nombre no diga ya. Casi siempre eso es
+// "cuántas cosas hay", y como la web y la app lo enseñan las dos, la frase se
+// escribe aquí una sola vez.
+
+/** "8 guardados", o "3 de 8" mientras hay una búsqueda escrita. */
+function countLabel(shown,total,singular,plural){
+ const t=Math.trunc(Number(total)||0), s=Math.trunc(Number(shown)||0);
+ // En una pantalla vacía el mensaje que dice qué hacer está justo debajo; un
+ // "0 recetas" encima de él sólo estorba.
+ if(t<=0)return null;
+ if(s!==t)return s+' de '+t;
+ return t+' '+(t===1?singular:plural)}
+
+/** Junta trozos con un punto, saltándose los que no existen. */
+function joinDetail(parts){
+ const kept=(parts||[]).filter(p=>typeof p==='string'&&p.length);
+ return kept.length?kept.join(' · '):null}
+
 // Todas las etiquetas posibles, para armar el filtro.
 const ALL_BADGES=[
  {k:'sinAzucar',n:'Sin azúcar',emoji:'🍭',d:'Sin azúcar añadida'},
@@ -327,5 +349,6 @@ return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS
         normalizarEtiqueta:normalizarEtiqueta,
         BADGES:BADGES, ALL_BADGES:ALL_BADGES,
         recipeBadges:recipeBadges, esPaleo:esPaleo,
-        esFruta:esFruta, FRUTAS:FRUTAS};
+        esFruta:esFruta, FRUTAS:FRUTAS,
+        countLabel:countLabel, joinDetail:joinDetail};
 });

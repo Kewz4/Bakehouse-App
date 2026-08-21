@@ -27,10 +27,10 @@ struct RecipesView: View {
         // una List. La calculadora y los consejos son filas más, sin adornos.
         List {
             Group {
-                VStack(alignment: .leading, spacing: 14) {
-                    BrandHeader(subtitle: "Recetas y precios")
-                    SectionHeading(eyebrow: "Tus postres", title: "Recetas & precios")
-                }
+                ScreenHeader(
+                    title: "Recetas",
+                    detail: Labels.count(shown: filtered.count, total: store.recipes.count,
+                                         singular: "receta", plural: "recetas"))
                 badgeFilterRow
 
                 if filtered.isEmpty {
@@ -255,10 +255,7 @@ struct PriceCalculatorPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Eyebrow(text: "Calculadora")
-                Text("¿Cuánto cobrar?").font(Theme.title(21)).foregroundStyle(Theme.ink)
-            }
+            Text("¿Cuánto cobrar?").font(Theme.title(21)).foregroundStyle(Theme.ink)
             Text("Escribe cuánto te cuesta hacer una porción y cuánto quieres ganar.")
                 .font(Theme.rounded(12))
                 .foregroundStyle(Theme.muted)
@@ -326,10 +323,7 @@ struct TipsPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 4) {
-                Eyebrow(text: "Consejos")
-                Text("Cómo definir tu precio").font(Theme.title(21)).foregroundStyle(Theme.ink)
-            }
+            Text("Cómo definir tu precio").font(Theme.title(21)).foregroundStyle(Theme.ink)
             VStack(spacing: 0) {
                 ForEach(tips, id: \.0) { tip in
                     DotRow(title: tip.0, subtitle: tip.1)

@@ -15,9 +15,14 @@ struct SalesView: View {
 
     var body: some View {
         ListScaffold(
-            eyebrow: "Ingresos",
             title: "Ventas",
-            subtitle: store.period.label,
+            // El período sí hace falta decirlo: esta lista está filtrada por él
+            // y el selector está en la otra pestaña, así que desde aquí no se
+            // vería por ningún lado de dónde salen (o no salen) estas ventas.
+            detail: Labels.join(
+                store.period.label,
+                Labels.count(shown: filtered.count, total: store.sales.count,
+                             singular: "venta", plural: "ventas")),
             searchPrompt: "Buscar venta…",
             search: $search,
             addLabel: "Registrar venta",

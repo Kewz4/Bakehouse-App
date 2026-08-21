@@ -16,9 +16,11 @@ struct ExpensesView: View {
 
     var body: some View {
         ListScaffold(
-            eyebrow: "Lo que gastas",
             title: "Gastos",
-            subtitle: store.period.label,
+            detail: Labels.join(
+                store.period.label,
+                Labels.count(shown: filtered.count, total: store.expenses.count,
+                             singular: "gasto", plural: "gastos")),
             searchPrompt: "Buscar gasto…",
             search: $search,
             addLabel: "Registrar gasto",

@@ -27,6 +27,10 @@ final class AppStore {
     private let client = SyncClient()
     private let monitor = NetworkMonitor()
 
+    /// Mira si hay una versión más nueva de la app publicada. Vive aquí porque
+    /// comparte el mismo cliente de red y el mismo ciclo de vida.
+    let updates: Updates
+
     private var syncTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
     private var periodicTask: Task<Void, Never>?
@@ -40,6 +44,7 @@ final class AppStore {
 
     init(doc: SyncDocument? = nil, startBackgroundWork: Bool = true) {
         self.doc = doc ?? LocalStore.load()
+        self.updates = Updates(client: client)
         guard startBackgroundWork else { return }
         monitor.onBecameOnline = { [weak self] in
             guard let self else { return }
@@ -56,6 +61,10 @@ final class AppStore {
         }
         monitor.start()
         Task { await boot() }
+        // Al arrancar hay que preguntarlo aquí y no en `appBecameActive()`:
+        // ese aviso lo dispara un CAMBIO de estado de la escena, y el primer
+        // `.active` de un arranque en frío no es un cambio, así que no llega.
+        Task { await updates.check() }
     }
 
     var range: ClosedRange<Date> {
@@ -266,12 +275,16 @@ final class AppStore {
                 try? await Task.sleep(for: .seconds(30))
                 guard let self else { return }
                 self.refreshFromServer()
+                // Para una app abierta toda la tarde. No hace una petición cada
+                // 30 s: `Updates` sólo deja pasar una cada diez minutos.
+                await self.updates.check()
             }
         }
     }
 
     /// Al volver a abrir la app: bajar lo nuevo y subir lo que quedó pendiente.
     func appBecameActive() {
+        Task { await updates.check() }
         if !cloudEnabled {
             Task { await boot() }
             return

@@ -66,8 +66,24 @@ final class MathConformanceTests: XCTestCase {
             let amount: Double
             let unit: String
         }
+        struct CountCase: Decodable {
+            struct Input: Decodable {
+                let shown: Int
+                let total: Int
+                let singular: String
+                let plural: String
+            }
+            let `in`: Input
+            let out: String?
+        }
+        struct JoinCase: Decodable {
+            let `in`: [String?]
+            let out: String?
+        }
         let baseCost: [IngredientCase]
         let displayCost: [DisplayCostCase]
+        let countLabel: [CountCase]
+        let joinDetail: [JoinCase]
         let recipe: [RecipeCase]
     }
 
@@ -261,5 +277,27 @@ final class MathConformanceTests: XCTestCase {
         // Con el redondeo viejo daba 1.45 en vez de 1.4330.
         XCTAssertLessThan(abs(line.lineTotal - 1.4330), 0.0005,
                           "el costo de la línea se desvió: \(line.lineTotal)")
+    }
+
+    /// Las cabeceras dicen lo mismo en el teléfono y en la laptop.
+    ///
+    /// No mueve ningún precio, pero es la clase de detalle que hace que la misma
+    /// pantalla se sienta como dos apps distintas: "8 guardados" en un sitio y
+    /// "8 ingredientes" en el otro.
+    func testCountLabelMatchesJavaScript() throws {
+        for c in try load().countLabel {
+            XCTAssertEqual(
+                Labels.count(shown: c.in.shown, total: c.in.total,
+                             singular: c.in.singular, plural: c.in.plural),
+                c.out,
+                "\(c.in.shown)/\(c.in.total): Swift y JavaScript escriben distinto")
+        }
+    }
+
+    func testDetailJoinMatchesJavaScript() throws {
+        for c in try load().joinDetail {
+            XCTAssertEqual(Labels.joinAll(c.in), c.out,
+                           "\(c.in): la unión de trozos no coincide")
+        }
     }
 }

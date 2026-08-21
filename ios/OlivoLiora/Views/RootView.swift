@@ -94,26 +94,3 @@ extension View {
         }
     }
 }
-
-/// Cabecera común: marca, período y estado de guardado.
-struct BrandHeader: View {
-    let subtitle: String
-
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 5) {
-                    Text("Olivo").font(Theme.title(24)).foregroundStyle(Theme.ink)
-                    Text("&").font(Theme.title(24)).foregroundStyle(Theme.gold)
-                    Text("Liora").font(Theme.title(24)).foregroundStyle(Theme.ink)
-                }
-                Text(subtitle.uppercased())
-                    .font(Theme.rounded(10, .semibold))
-                    .tracking(1.5)
-                    .foregroundStyle(Theme.muted)
-            }
-            Spacer()
-            SyncBadge()
-        }
-    }
-}

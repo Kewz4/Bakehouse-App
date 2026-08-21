@@ -225,11 +225,24 @@ function badgeFilterRow(){
   `<button class="bfilter${filtroBadge===b.k?' active':''}" onclick="setBadgeFilter('${b.k}')" title="${esc(b.d)}">${b.emoji} ${esc(b.n)} <span>${cuenta[b.k]}</span></button>`
  ).join('')}${filtroBadge?`<button class="bfilter clear" onclick="setBadgeFilter('')">Ver todas</button>`:''}</div>`}
 
+/** Escribe "8 guardados" (o "3 de 8") bajo el título de una pantalla.
+ *
+ * Es lo único que va debajo del nombre de cada sección: antes había ahí un
+ * antetítulo que decía lo mismo con otras palabras ("Lo que compras" encima de
+ * "Ingredientes"). Un recuento sí dice algo que el título no dice.
+ */
+function setCount(sel,shown,total,singular,plural){
+ const el=$(sel);if(!el)return;
+ const t=countLabel(shown,total,singular,plural);
+ el.textContent=t||'';el.style.display=t?'':'none'}
+
 function renderRecipes(){const q=(($('#recipeSearch')||{}).value||'').toLowerCase().trim();const idx=ingredientsById();
 const list=data.recipes.filter(r=>(!q||(r.name||'').toLowerCase().includes(q))&&
  (!filtroBadge||recipeBadges(r,idx).badges.some(b=>b.k===filtroBadge)));
 const el=$('#recipesList');
-const fr=$('#badgeFilters');if(fr)fr.innerHTML=badgeFilterRow();el.innerHTML=list.length?list.map(r=>{const c=recipeCost(r),u=recipeUnitCost(r),p=recipePrice(r),m=recipeMargin(r),cls=!p?'warn':m>=60?'ok':m>=45?'warn':'bad';return `<article class="recipe">${r.photo?`<img class="recipe-photo" src="${esc(r.photo)}" alt="${esc(r.name)}" loading="lazy">`:''}<span class="tag">${esc(r.yield)} porciones</span><h3>${esc(r.name)}</h3><small>${(r.ingredients||[]).length} ingredientes · costo por porción ${money(u)}</small><div class="recipe-data"><div><span>Costo total</span><b>${money(c)}</b></div><div><span>Precio / porción</span><b>${money(p)}</b></div></div><span class="badge ${cls}">${p?`Ganas ${m.toFixed(0)}% de cada venta`:'Falta ponerle precio'}</span>${p&&m<60?`<p class="helper">Cobrando <b>${money(suggestPrice(r))}</b> ganarías más</p>`:''}${macroSummary(r)}${badgeRow(r)}<div class="recipe-actions"><button onclick="openRecipe('${r.id}')">Editar</button><button onclick="duplicateRecipe('${r.id}')">Duplicar</button><button onclick="quickFromRecipe('${r.id}')">Calcular precio</button><button class="negative" onclick="removeItem('recipes','${r.id}')">Eliminar</button></div></article>`}).join(''):`<div class="empty">${q?'Ninguna receta coincide con tu búsqueda.':'Crea tu primer postre y calcula en un minuto cuánto cobrar.'}</div>`}
+const fr=$('#badgeFilters');if(fr)fr.innerHTML=badgeFilterRow();
+setCount('#recipeCount',list.length,data.recipes.length,'receta','recetas');
+el.innerHTML=list.length?list.map(r=>{const c=recipeCost(r),u=recipeUnitCost(r),p=recipePrice(r),m=recipeMargin(r),cls=!p?'warn':m>=60?'ok':m>=45?'warn':'bad';return `<article class="recipe">${r.photo?`<img class="recipe-photo" src="${esc(r.photo)}" alt="${esc(r.name)}" loading="lazy">`:''}<span class="tag">${esc(r.yield)} porciones</span><h3>${esc(r.name)}</h3><small>${(r.ingredients||[]).length} ingredientes · costo por porción ${money(u)}</small><div class="recipe-data"><div><span>Costo total</span><b>${money(c)}</b></div><div><span>Precio / porción</span><b>${money(p)}</b></div></div><span class="badge ${cls}">${p?`Ganas ${m.toFixed(0)}% de cada venta`:'Falta ponerle precio'}</span>${p&&m<60?`<p class="helper">Cobrando <b>${money(suggestPrice(r))}</b> ganarías más</p>`:''}${macroSummary(r)}${badgeRow(r)}<div class="recipe-actions"><button onclick="openRecipe('${r.id}')">Editar</button><button onclick="duplicateRecipe('${r.id}')">Duplicar</button><button onclick="quickFromRecipe('${r.id}')">Calcular precio</button><button class="negative" onclick="removeItem('recipes','${r.id}')">Eliminar</button></div></article>`}).join(''):`<div class="empty">${q?'Ninguna receta coincide con tu búsqueda.':'Crea tu primer postre y calcula en un minuto cuánto cobrar.'}</div>`}
 function duplicateRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;data.recipes.push(sello({...r,id:crypto.randomUUID(),name:r.name+' (copia)',ingredients:(r.ingredients||[]).map(i=>({...i}))}));save('Receta duplicada')}
 function quickFromRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;go('recipes');$('#quickCost').value=recipeUnitCost(r).toFixed(2);quickCalc();$('#quickCost').scrollIntoView({behavior:'smooth',block:'center'});toast('Listo: costo de una porción de '+r.name)}
 function renderTables(){
@@ -237,14 +250,17 @@ const qs=(($('#saleSearch')||{}).value||'').toLowerCase().trim();
 const sl=data.sales.filter(x=>!qs||(x.product||'').toLowerCase().includes(qs));
 $('#salesRows').innerHTML=sl.map(x=>{const r=data.recipes.find(r=>r.id===x.recipeId),cost=r?recipeUnitCost(r)*(+x.qty||0):0,prof=(+x.total||0)-cost;return `<tr><td data-label="Fecha">${fmtDate(x.date)}</td><td class="main"><b>${esc(x.product)}</b></td><td data-label="Cant.">${esc(x.qty)}</td><td class="amount" data-label="Total">${money(x.total)}</td><td class="${prof>=0?'positive':'negative'}" data-label="Utilidad">${money(prof)}</td><td class="actions"><button class="icon-btn" onclick="openSale('${x.id}')" aria-label="Editar venta">✎</button><button class="icon-btn" onclick="removeItem('sales','${x.id}')" aria-label="Eliminar venta">×</button></td></tr>`}).join('');
 $('#salesEmpty').style.display=sl.length?'none':'block';
+setCount('#saleCount',sl.length,data.sales.length,'venta','ventas');
 const qe=(($('#expenseSearch')||{}).value||'').toLowerCase().trim();
 const ex=data.expenses.filter(x=>!qe||(x.name||'').toLowerCase().includes(qe)||(x.category||'').toLowerCase().includes(qe));
 $('#expenseRows').innerHTML=ex.map(x=>`<tr><td data-label="Fecha">${fmtDate(x.date)}</td><td class="main"><b>${esc(x.name)}</b></td><td data-label="Categoría"><span class="chip">${esc(x.category)}</span></td><td class="amount negative" data-label="Monto">${money(x.amount)}</td><td class="actions"><button class="icon-btn" onclick="openExpense('${x.id}')" aria-label="Editar gasto">✎</button><button class="icon-btn" onclick="removeItem('expenses','${x.id}')" aria-label="Eliminar gasto">×</button></td></tr>`).join('');
 $('#expensesEmpty').style.display=ex.length?'none':'block';
+setCount('#expenseCount',ex.length,data.expenses.length,'gasto','gastos');
 const qi=(($('#ingSearch')||{}).value||'').toLowerCase().trim();
 const ing=data.ingredients.filter(x=>!qi||(x.name||'').toLowerCase().includes(qi));
 $('#ingredientRows').innerHTML=ing.map(x=>`<tr><td class="main"><b>${esc(x.name)}</b></td><td data-label="Cómo lo compras">${esc(x.unit)} de ${esc(x.quantity)} ${esc(unitInfo(x.unitSingle).s)}</td><td data-label="Te costó">${money(x.price)}</td><td class="amount" data-label="Sale a">${(()=>{const d=displayCost(x);return money(d.amount)+' / '+esc(d.unit)})()}</td><td class="actions"><button class="icon-btn" onclick="openIngredient('${x.id}')" aria-label="Editar ingrediente">✎</button><button class="icon-btn" onclick="removeItem('ingredients','${x.id}')" aria-label="Eliminar ingrediente">×</button></td></tr>`).join('');
-$('#ingredientsEmpty').style.display=ing.length?'none':'block'}
+$('#ingredientsEmpty').style.display=ing.length?'none':'block';
+setCount('#ingCount',ing.length,data.ingredients.length,'guardado','guardados')}
 function renderChart(){const src=(window.ALLDATA&&window.ALLDATA.sales)||data.sales;const now=new Date(),vals=[0,0,0,0,0,0],labels=[];
 for(let i=5;i>=0;i--){const d=new Date(now.getFullYear(),now.getMonth()-i,1);let l=d.toLocaleDateString('es',{month:'short'}).replace('.','');labels.push(l.charAt(0).toUpperCase()+l.slice(1))}
 src.forEach(x=>{const d=new Date(String(x.date)+'T12:00:00');if(isNaN(d))return;const diff=(now.getFullYear()-d.getFullYear())*12+(now.getMonth()-d.getMonth());if(diff>=0&&diff<6)vals[5-diff]+=+x.total||0});
@@ -272,7 +288,7 @@ function macroFields(g){const m=(g&&g.macros)||{};
   <input id="mac_${x.k}" type="number" min="0" step="0.01" inputmode="decimal" value="${m[x.k]!=null&&m[x.k]!==''?esc(m[x.k]):''}"></div>`).join('');
  return `<details class="macros"${abierto}>
   <summary>Información nutricional <span class="opt">opcional</span></summary>
-  <p class="helper">Sirve para saber cuánta azúcar, proteína o grasa lleva cada postre. Puedes dejarlo vacío.</p>
+  <p class="helper">Sirve para saber cuánta azúcar, proteína o grasa lleva cada postre.</p>
   ${VISION?`<div class="scan-row">
     <input id="macCam" type="file" accept="image/*" capture="environment" onchange="scanLabel(event)" hidden>
     <input id="macFile" type="file" accept="image/*" onchange="scanLabel(event)" hidden>

@@ -881,6 +881,134 @@
       "completo": false
     }
   ],
+  "countLabel": [
+    {
+      "in": {
+        "shown": 0,
+        "total": 0,
+        "singular": "receta",
+        "plural": "recetas"
+      },
+      "out": null
+    },
+    {
+      "in": {
+        "shown": 0,
+        "total": 1,
+        "singular": "receta",
+        "plural": "recetas"
+      },
+      "out": "0 de 1"
+    },
+    {
+      "in": {
+        "shown": 1,
+        "total": 1,
+        "singular": "receta",
+        "plural": "recetas"
+      },
+      "out": "1 receta"
+    },
+    {
+      "in": {
+        "shown": 2,
+        "total": 2,
+        "singular": "venta",
+        "plural": "ventas"
+      },
+      "out": "2 ventas"
+    },
+    {
+      "in": {
+        "shown": 3,
+        "total": 8,
+        "singular": "guardado",
+        "plural": "guardados"
+      },
+      "out": "3 de 8"
+    },
+    {
+      "in": {
+        "shown": 8,
+        "total": 8,
+        "singular": "guardado",
+        "plural": "guardados"
+      },
+      "out": "8 guardados"
+    },
+    {
+      "in": {
+        "shown": 12,
+        "total": 12,
+        "singular": "gasto",
+        "plural": "gastos"
+      },
+      "out": "12 gastos"
+    },
+    {
+      "in": {
+        "shown": 0,
+        "total": 40,
+        "singular": "gasto",
+        "plural": "gastos"
+      },
+      "out": "0 de 40"
+    },
+    {
+      "in": {
+        "shown": 5,
+        "total": -1,
+        "singular": "venta",
+        "plural": "ventas"
+      },
+      "out": null
+    }
+  ],
+  "joinDetail": [
+    {
+      "in": [
+        "Este mes",
+        "12 ventas"
+      ],
+      "out": "Este mes · 12 ventas"
+    },
+    {
+      "in": [
+        "Este mes",
+        null
+      ],
+      "out": "Este mes"
+    },
+    {
+      "in": [
+        null,
+        "12 ventas"
+      ],
+      "out": "12 ventas"
+    },
+    {
+      "in": [
+        null,
+        null
+      ],
+      "out": null
+    },
+    {
+      "in": [
+        "Este mes",
+        ""
+      ],
+      "out": "Este mes"
+    },
+    {
+      "in": [
+        "Hoy",
+        "1 gasto",
+        ""
+      ],
+      "out": "Hoy · 1 gasto"
+    }
+  ],
   "recipe": [
     {
       "in": {

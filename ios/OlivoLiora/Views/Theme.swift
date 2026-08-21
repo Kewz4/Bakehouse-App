@@ -138,31 +138,6 @@ extension View {
 
 // MARK: - Piezas comunes
 
-/// El texto pequeño en mayúsculas dorado que encabeza cada sección.
-struct Eyebrow: View {
-    let text: String
-    var body: some View {
-        Text(text.uppercased())
-            .font(Theme.rounded(11, .heavy))
-            .tracking(1.4)
-            .foregroundStyle(Theme.gold)
-    }
-}
-
-struct SectionHeading: View {
-    let eyebrow: String
-    let title: String
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Eyebrow(text: eyebrow)
-            Text(title)
-                .font(Theme.title(28))
-                .foregroundStyle(Theme.ink)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
 /// Mensaje para cuando todavía no hay nada. Nunca es un error: siempre dice
 /// qué hacer a continuación.
 struct EmptyHint: View {

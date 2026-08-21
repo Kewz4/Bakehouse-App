@@ -5,7 +5,7 @@
 # absurdos. `xcodegen generate` lo reconstruye desde este archivo.
 name: OlivoLiora
 options:
-  bundleIdPrefix: com.olivoliora
+  bundleIdPrefix: app.gorilla3597
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -30,8 +30,10 @@ targets:
       path: OlivoLiora/Info.plist
       properties:
         CFBundleDisplayName: Olivo & Liora
-        CFBundleShortVersionString: "1.0.0"
-        CFBundleVersion: "1"
+        # Se toman de los ajustes de compilación para que el workflow pueda
+        # subir el número de versión sin tocar este archivo.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSRequiresIPhoneOS: true
         UILaunchScreen:
           UIColorName: LaunchBackground
@@ -48,7 +50,11 @@ targets:
         NSPhotoLibraryUsageDescription: Para elegir una foto de tus postres desde tu galería.
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.olivoliora.app
+        # Este identificador no lo elegimos nosotros: viene con el perfil de
+        # firma. Tiene que coincidir letra por letra o el iPhone instala una
+        # segunda app en vez de actualizar la que ella ya tiene (y con ella se
+        # quedarían atrás sus datos guardados en el teléfono).
+        PRODUCT_BUNDLE_IDENTIFIER: app.gorilla3597.nadir5999
         MARKETING_VERSION: "1.0.0"
         CURRENT_PROJECT_VERSION: "1"
         SWIFT_VERSION: "5.0"
@@ -57,8 +63,11 @@ targets:
         SWIFT_EMIT_LOC_STRINGS: YES
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        DEVELOPMENT_TEAM: ""
+        DEVELOPMENT_TEAM: 5W4AQ72S6G
         CODE_SIGN_STYLE: Manual
+        # Por defecto se compila sin firmar, que es lo que hace falta para
+        # comprobar que todo sigue compilando. Cuando hay certificados, el
+        # workflow pisa estos tres valores desde la línea de comandos.
         CODE_SIGN_IDENTITY: ""
         CODE_SIGNING_REQUIRED: NO
         CODE_SIGNING_ALLOWED: NO

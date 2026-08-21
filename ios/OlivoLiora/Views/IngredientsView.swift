@@ -16,8 +16,9 @@ struct IngredientsView: View {
 
     var body: some View {
         ListScaffold(
-            eyebrow: "Lo que compras",
             title: "Ingredientes",
+            detail: Labels.count(shown: filtered.count, total: store.ingredients.count,
+                                 singular: "guardado", plural: "guardados"),
             searchPrompt: "Buscar ingrediente…",
             search: $search,
             addLabel: "Nuevo ingrediente",
@@ -164,7 +165,7 @@ struct IngredientEditor: View {
     private var macrosSection: some View {
         DisclosureGroup(isExpanded: $showMacros) {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Sirve para saber cuánta azúcar, proteína o grasa lleva cada postre. Puedes dejarlo vacío.")
+                Text("Sirve para saber cuánta azúcar, proteína o grasa lleva cada postre.")
                     .font(Theme.rounded(12))
                     .foregroundStyle(Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)

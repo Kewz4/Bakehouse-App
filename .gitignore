@@ -7,3 +7,12 @@ DerivedData/
 ios/OlivoLiora.xcodeproj/
 ios/build/
 ios/OlivoLioraCore/.build/
+
+# Credenciales de firma. Nunca al repositorio: un .p12 lleva dentro la clave
+# privada con la que se firma la app, y este repositorio es público. Van en los
+# secretos de GitHub Actions, en base64.
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
+ios/OlivoLiora/OlivoLiora.entitlements

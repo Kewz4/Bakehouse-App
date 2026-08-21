@@ -500,3 +500,86 @@ test('la fruta cambia "sin azúcar" por "bajo en azúcar"', async () => {
     assert.deepEqual(d.errors, []);
   } finally { await d.close(); }
 });
+
+// --- Que cada pantalla se nombre una sola vez -------------------------------
+// "necesito que en todas las pantallas dejes de ser tan redundante".
+// Antes cada sección decía su nombre tres veces: la pestaña, un antetítulo
+// sinónimo ("Lo que compras") y el título. Esto lo fija para que no vuelva.
+
+test('ninguna pantalla se nombra dos veces en sus encabezados', async () => {
+  const d = await device();
+  try {
+    // La pieza que rompía la regla era `.eyebrow`: un antetítulo puesto encima
+    // de cada título que siempre acababa siendo otra forma de decir lo mismo —
+    // "Lo que compras" sobre "Ingredientes", "Ranking" sobre "Productos más
+    // vendidos". Como ya no debe quedar ninguno, comprobarlo es directo.
+    const antetitulos = await d.page.evaluate(() =>
+      [...document.querySelectorAll('.eyebrow')].map(e => e.textContent));
+    assert.deepEqual(antetitulos, [],
+      'un antetítulo encima de un título es siempre el título dicho dos veces');
+
+    for (const vista of ['dashboard', 'recipes', 'sales', 'expenses', 'inventory']) {
+      await d.page.evaluate(v => go(v), vista);
+
+      const encabezados = await d.page.evaluate((v) => {
+        const sec = document.querySelector('#' + v);
+        return {
+          titulos: sec.querySelectorAll('h1').length,
+          // Se miran sólo los encabezados. El texto corrido no cuenta: "Aún no
+          // hay ventas aquí" dice "ventas" y es la frase correcta, no una
+          // repetición. Un primer intento de esta prueba contaba todo el texto
+          // de la sección y marcaba justo eso.
+          textos: [...sec.querySelectorAll('h1, h2, h3')]
+            .map(e => e.textContent.trim().toLowerCase())
+        };
+      }, vista);
+
+      assert.equal(encabezados.titulos, 1, `${vista} debería tener un solo h1`);
+      assert.equal(new Set(encabezados.textos).size, encabezados.textos.length,
+        `${vista} repite un encabezado: ${encabezados.textos.join(' / ')}`);
+    }
+
+    // Y la marca no se repite dentro del panel: ya está arriba, en la cabecera.
+    // Antes el saludo decía "Hola, Camila. Así va Olivo & Liora." con el logo
+    // justo encima.
+    await d.page.evaluate(() => go('dashboard'));
+    const marca = await d.page.evaluate(() =>
+      (document.querySelector('#dashboard').textContent.match(/Olivo/g) || []).length);
+    assert.equal(marca, 0, 'el nombre de la app no debería repetirse dentro del panel');
+
+    assert.deepEqual(d.errors, []);
+  } finally {
+    await d.close();
+  }
+});
+
+test('bajo el título se lee cuántas cosas hay, no un sinónimo del título', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => {
+      data.ingredients = [
+        sello({ id: crypto.randomUUID(), name: 'Harina',   unit: 'bolsa', quantity: 5, price: 6.5, unitSingle: 'lb' }),
+        sello({ id: crypto.randomUUID(), name: 'Azúcar',   unit: 'bolsa', quantity: 2, price: 3,   unitSingle: 'kg' }),
+        sello({ id: crypto.randomUUID(), name: 'Vainilla', unit: 'frasco', quantity: 60, price: 4.2, unitSingle: 'ml' })
+      ];
+      render();
+      go('inventory');
+    });
+
+    assert.equal(await d.page.textContent('#ingCount'), '3 guardados');
+
+    // Con una búsqueda encima cambia a "cuántas de cuántas".
+    await d.page.fill('#ingSearch', 'har');
+    await d.page.waitForFunction(() =>
+      document.querySelector('#ingCount').textContent === '1 de 3');
+
+    // Y en una pantalla vacía no se escribe nada: debajo está el mensaje que
+    // dice qué hacer, y un "0 ventas" encima sólo estorbaría.
+    await d.page.evaluate(() => go('sales'));
+    assert.equal((await d.page.textContent('#saleCount')).trim(), '');
+
+    assert.deepEqual(d.errors, []);
+  } finally {
+    await d.close();
+  }
+});

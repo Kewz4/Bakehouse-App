@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Instalar Olivo &amp; Liora</title>
+<link rel="apple-touch-icon" href="/icon-180.png">
+<style>
+  :root{--ink:#20362c;--green:#365b4c;--cream:#fbf9f3;--gold:#c8954e;--muted:#748178;--line:#e7e2d7;--card:#fffefa}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;padding:28px;
+       background:var(--cream);color:var(--ink);
+       font:16px/1.45 ui-rounded,"Avenir Next",Avenir,system-ui,sans-serif}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:22px;
+        box-shadow:0 8px 24px #3d4a3a12;padding:30px 26px;max-width:420px;width:100%;text-align:center}
+  .brand{font:26px Georgia,serif;letter-spacing:-1px;margin:0 0 4px}
+  .brand span{color:var(--gold)}
+  p{color:var(--muted);margin:0 0 22px}
+  a.btn{display:block;background:var(--green);color:#fff;text-decoration:none;
+        border-radius:14px;padding:16px;font-weight:750;box-shadow:0 4px 12px #365b4c2e}
+  a.btn:active{transform:scale(.985)}
+  .after{font-size:13px;margin:18px 0 0}
+  .note{display:none;font-size:13px;color:#96601f;background:#fdf0dc;
+        border-radius:12px;padding:12px;margin:18px 0 0}
+  .note.show{display:block}
+</style>
+</head>
+<body>
+  <main class="card">
+    <h1 class="brand">Olivo <span>&amp;</span> Liora</h1>
+    <p>Toca el botón y la app se instala sola.</p>
+
+    <a class="btn" id="install" href="#">Instalar en este iPhone</a>
+
+    <p class="after">Después aparece en tu pantalla de inicio, como cualquier otra app.</p>
+
+    <div class="note" id="note"></div>
+  </main>
+
+<script>
+// La dirección de instalación se pide al servidor en vez de escribirla aquí:
+// así esta página no hay que tocarla nunca, publique lo que publique el taller.
+fetch('/api/app-version', { cache: 'no-store' })
+  .then(function (r) { return r.json(); })
+  .then(function (info) {
+    var note = document.getElementById('note');
+    if (!info || !info.disponible) {
+      document.getElementById('install').style.display = 'none';
+      note.textContent = 'Todavía no hay ninguna versión lista. Vuelve en un rato.';
+      note.className = 'note show';
+      return;
+    }
+    document.getElementById('install').href = info.instalar;
+  })
+  .catch(function () {
+    var note = document.getElementById('note');
+    note.textContent = 'No hay conexión ahora mismo. Inténtalo de nuevo con señal.';
+    note.className = 'note show';
+  });
+
+// Esto sólo funciona en un iPhone: en cualquier otro sitio el enlace no hace
+// nada y quedarse mirando un botón muerto es peor que un aviso.
+if (!/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+  var n = document.getElementById('note');
+  n.textContent = 'Abre esta página en el iPhone donde quieras la app.';
+  n.className = 'note show';
+}
+</script>
+</body>
+</html>

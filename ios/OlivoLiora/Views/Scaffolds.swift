@@ -3,6 +3,12 @@ import OlivoLioraCore
 
 /// Estructura común de las listas (ventas, gastos, ingredientes).
 ///
+/// La cabecera es UNA sola línea con el nombre de la pantalla. Antes había dos
+/// bloques encima de cada lista — la marca y luego un antetítulo con el título —
+/// y entre eso y la pestaña de abajo, "Ingredientes" acababa escrito tres veces
+/// en la misma pantalla. El nombre de la app ya está en el icono y en el panel
+/// de inicio; no hace falta repetirlo en cada sitio al que ella entra.
+///
 /// Va sobre `List` y no sobre `ScrollView` + `LazyVStack` por una razón muy
 /// concreta: `.swipeActions` SÓLO funciona dentro de una `List`. Fuera de ella
 /// el modificador compila igual y no hace absolutamente nada, que es la peor
@@ -11,9 +17,9 @@ import OlivoLioraCore
 /// La `List` va desnuda (sin separadores, sin fondo, sin sangrías propias) para
 /// que las tarjetas se vean igual que antes.
 struct ListScaffold<Content: View>: View {
-    let eyebrow: String
     let title: String
-    var subtitle: String? = nil
+    /// Bajo el título, y sólo si dice algo que el título no dice ya.
+    var detail: String? = nil
     let searchPrompt: String
     @Binding var search: String
     let addLabel: String
@@ -25,11 +31,8 @@ struct ListScaffold<Content: View>: View {
     var body: some View {
         List {
             Group {
-                VStack(alignment: .leading, spacing: 14) {
-                    BrandHeader(subtitle: subtitle ?? title)
-                    SectionHeading(eyebrow: eyebrow, title: title)
-                }
-                .padding(.bottom, 2)
+                ScreenHeader(title: title, detail: detail)
+                    .padding(.bottom, 2)
 
                 if isEmpty {
                     EmptyHint(text: emptyText)
@@ -169,5 +172,35 @@ extension View {
     func deleteConfirm(isPresented: Binding<Bool>, what: String,
                        onDelete: @escaping () -> Void) -> some View {
         modifier(DeleteConfirm(isPresented: isPresented, what: what, onDelete: onDelete))
+    }
+}
+
+
+/// La cabecera de una pantalla: su nombre y, si lo hay, un dato que valga la
+/// pena leer.
+///
+/// La regla que sigue todo esto: **el nombre de la pantalla se escribe una vez**.
+/// Lo que va debajo tiene que aportar información nueva — cuántas cosas hay, de
+/// qué período son — y nunca ser otra manera de decir lo mismo.
+struct ScreenHeader: View {
+    let title: String
+    var detail: String? = nil
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(Theme.title(28))
+                    .foregroundStyle(Theme.ink)
+                if let detail {
+                    Text(detail)
+                        .font(Theme.rounded(12, .semibold))
+                        .foregroundStyle(Theme.muted)
+                }
+            }
+            Spacer(minLength: 8)
+            SyncBadge()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
