@@ -1,0 +1,28 @@
+name: Web y sincronización
+
+on:
+  push:
+    branches: [main, 'claude/**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Pruebas del motor de combinación y del endpoint
+        run: npm test
+
+      - name: Instalar navegador para las pruebas de dos dispositivos
+        run: |
+          npm install --no-save playwright
+          npx playwright install --with-deps chromium
+
+      - name: Dos navegadores contra un servidor (sincronización de verdad)
+        run: npm run test:e2e

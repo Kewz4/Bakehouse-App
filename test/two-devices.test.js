@@ -14,7 +14,12 @@ const { chromium } = require('playwright');
 const { createServer } = require('./dev-server.js');
 const Sync = require('../sync-core.js');
 
+// En este contenedor Chromium ya viene instalado en /opt; en CI lo instala
+// Playwright en su sitio por defecto. Si la ruta no existe, se deja que
+// Playwright elija.
+const fs = require('node:fs');
 const EXEC = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium-1194/chrome-linux/chrome';
+const execPath = EXEC && fs.existsSync(EXEC) ? EXEC : undefined;
 
 let server, browser, base;
 
@@ -22,7 +27,7 @@ test.before(async () => {
   server = createServer();
   await new Promise(r => server.listen(0, r));
   base = 'http://127.0.0.1:' + server.address().port + '/';
-  browser = await chromium.launch({ executablePath: EXEC, args: ['--no-sandbox'] });
+  browser = await chromium.launch({ executablePath: execPath, args: ['--no-sandbox'] });
 });
 
 // Cada prueba arranca con el almacén vacío: si no, los datos de una prueba

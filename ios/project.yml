@@ -1,0 +1,64 @@
+# Proyecto de Xcode generado con XcodeGen.
+#
+# Se describe el proyecto aquí en vez de guardar el .xcodeproj porque el
+# formato .pbxproj es prácticamente ilegible en un diff y da conflictos
+# absurdos. `xcodegen generate` lo reconstruye desde este archivo.
+name: OlivoLiora
+options:
+  bundleIdPrefix: com.olivoliora
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+packages:
+  OlivoLioraCore:
+    path: OlivoLioraCore
+
+targets:
+  OlivoLiora:
+    type: application
+    platform: iOS
+    sources:
+      - path: OlivoLiora
+        excludes:
+          - "**/.DS_Store"
+    dependencies:
+      - package: OlivoLioraCore
+        product: OlivoLioraCore
+    info:
+      path: OlivoLiora/Info.plist
+      properties:
+        CFBundleDisplayName: Olivo & Liora
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "1"
+        LSRequiresIPhoneOS: true
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        UIUserInterfaceStyle: Light
+        # La app es en español para ella; no depende del idioma del teléfono.
+        CFBundleLocalizations: [es]
+        CFBundleDevelopmentRegion: es
+        ITSAppUsesNonExemptEncryption: false
+        # Textos de permiso: se enseñan tal cual, así que se explican en su
+        # idioma y sin tecnicismos.
+        NSCameraUsageDescription: Para tomarle una foto a tus postres y verlos en tus recetas.
+        NSPhotoLibraryUsageDescription: Para elegir una foto de tus postres desde tu galería.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.olivoliora.app
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"       # sólo iPhone
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        DEVELOPMENT_TEAM: ""
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: ""
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGNING_ALLOWED: NO

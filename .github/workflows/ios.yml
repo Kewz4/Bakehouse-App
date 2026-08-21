@@ -1,0 +1,116 @@
+name: App de iPhone
+
+# Compila la app y publica un .ipa SIN FIRMAR, listo para firmar con KravaSign.
+#
+# Se compila aquí y no a mano porque el .ipa hay que rehacerlo en cada cambio,
+# y porque así el proyecto se compila siempre con el mismo Xcode y no "en la
+# máquina de alguien".
+
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths:
+      - 'ios/**'
+      - 'sync-core.js'
+      - 'test/make-conformance-fixtures.js'
+      - '.github/workflows/ios.yml'
+  pull_request:
+    paths: ['ios/**', 'sync-core.js', '.github/workflows/ios.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Elegir el Xcode más nuevo disponible
+        run: |
+          echo "Xcodes instalados:"
+          ls -1 /Applications | grep -i '^Xcode' || true
+          # El más nuevo primero: hace falta el SDK de iOS 26 para Liquid Glass.
+          # Si el runner todavía no lo trae, el código compila igual gracias a
+          # los #if canImport(FoundationModels) de Views/Theme.swift, sólo que
+          # sin los efectos de cristal.
+          newest=$(ls -1d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+          echo "Usando $newest"
+          sudo xcode-select -s "$newest/Contents/Developer"
+          xcodebuild -version
+          xcodebuild -showsdks | grep -i iphoneos || true
+
+      - name: Comprobar que el motor de combinación sigue igual al de la web
+        run: |
+          # Si alguien tocó sync-core.js y no regeneró los casos, esto lo caza
+          # antes de que el teléfono y la laptop empiecen a discrepar.
+          node test/make-conformance-fixtures.js
+          if ! git diff --quiet -- ios/OlivoLioraCore/Tests/OlivoLioraCoreTests/merge-conformance.json; then
+            echo "::error::Los casos de conformidad están desactualizados."
+            echo "Corre 'node test/make-conformance-fixtures.js' y súbelos."
+            git diff -- ios/OlivoLioraCore/Tests/OlivoLioraCoreTests/merge-conformance.json
+            exit 1
+          fi
+
+      - name: Pruebas del núcleo (modelos, cuentas y sincronización)
+        working-directory: ios/OlivoLioraCore
+        run: swift test
+
+      - name: Instalar XcodeGen
+        run: brew install xcodegen
+
+      - name: Generar el proyecto de Xcode
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Compilar la app (sin firmar)
+        working-directory: ios
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project OlivoLiora.xcodeproj \
+            -scheme OlivoLiora \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            build | xcpretty || \
+          xcodebuild \
+            -project OlivoLiora.xcodeproj \
+            -scheme OlivoLiora \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            build
+
+      - name: Empaquetar el .ipa
+        working-directory: ios
+        run: |
+          APP="build/Build/Products/Release-iphoneos/OlivoLiora.app"
+          test -d "$APP" || { echo "::error::No se generó $APP"; ls -R build/Build/Products || true; exit 1; }
+          # Un .ipa es sólo un zip con la app dentro de una carpeta Payload.
+          rm -rf Payload && mkdir Payload
+          cp -R "$APP" Payload/
+          zip -qry OlivoLiora-unsigned.ipa Payload
+          rm -rf Payload
+          echo "Tamaño: $(du -h OlivoLiora-unsigned.ipa | cut -f1)"
+          unzip -l OlivoLiora-unsigned.ipa | head -20
+
+      - name: Publicar el .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: OlivoLiora-unsigned-ipa
+          path: ios/OlivoLiora-unsigned.ipa
+          if-no-files-found: error
+          retention-days: 90
