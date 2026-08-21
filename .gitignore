@@ -6,3 +6,4 @@ DerivedData/
 *.xcuserstate
 ios/OlivoLiora.xcodeproj/
 ios/build/
+ios/OlivoLioraCore/.build/

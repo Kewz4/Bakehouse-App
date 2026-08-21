@@ -1,0 +1,524 @@
+[
+  {
+    "name": "gana el más reciente",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "s1",
+          "updatedAt": 1787000000100,
+          "deleted": false,
+          "product": "Flan",
+          "total": 10
+        }
+      ],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "s1",
+          "updatedAt": 1787000000200,
+          "deleted": false,
+          "product": "Flan grande",
+          "total": 14
+        }
+      ],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"id\":\"s1\",\"product\":\"Flan grande\",\"total\":14,\"updatedAt\":1787000000200}],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"id\":\"s1\",\"product\":\"Flan grande\",\"total\":14,\"updatedAt\":1787000000200}],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "union de dos dispositivos",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "a1",
+          "updatedAt": 1787000000100,
+          "deleted": false,
+          "total": 5
+        }
+      ],
+      "expenses": [
+        {
+          "id": "e1",
+          "updatedAt": 1787000000120,
+          "deleted": false,
+          "amount": 3
+        }
+      ],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "b1",
+          "updatedAt": 1787000000110,
+          "deleted": false,
+          "total": 7
+        }
+      ],
+      "expenses": [
+        {
+          "id": "e2",
+          "updatedAt": 1787000000130,
+          "deleted": false,
+          "amount": 4
+        }
+      ],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[{\"amount\":3,\"deleted\":false,\"id\":\"e1\",\"updatedAt\":1787000000120},{\"amount\":4,\"deleted\":false,\"id\":\"e2\",\"updatedAt\":1787000000130}],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"id\":\"a1\",\"total\":5,\"updatedAt\":1787000000100},{\"deleted\":false,\"id\":\"b1\",\"total\":7,\"updatedAt\":1787000000110}],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[{\"amount\":3,\"deleted\":false,\"id\":\"e1\",\"updatedAt\":1787000000120},{\"amount\":4,\"deleted\":false,\"id\":\"e2\",\"updatedAt\":1787000000130}],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"id\":\"a1\",\"total\":5,\"updatedAt\":1787000000100},{\"deleted\":false,\"id\":\"b1\",\"total\":7,\"updatedAt\":1787000000110}],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "lapida gana a registro viejo",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [],
+      "expenses": [
+        {
+          "id": "e1",
+          "updatedAt": 1787000000100,
+          "deleted": false,
+          "name": "Gas"
+        }
+      ],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [],
+      "expenses": [
+        {
+          "id": "e1",
+          "deleted": true,
+          "updatedAt": 1787000000200
+        }
+      ],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[{\"deleted\":true,\"id\":\"e1\",\"updatedAt\":1787000000200}],\"ingredients\":[],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[{\"deleted\":true,\"id\":\"e1\",\"updatedAt\":1787000000200}],\"ingredients\":[],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "edicion posterior resucita",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [],
+      "expenses": [
+        {
+          "id": "e1",
+          "deleted": true,
+          "updatedAt": 1787000000100
+        }
+      ],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [],
+      "expenses": [
+        {
+          "id": "e1",
+          "updatedAt": 1787000000300,
+          "deleted": false,
+          "name": "Gas para horno"
+        }
+      ],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[{\"deleted\":false,\"id\":\"e1\",\"name\":\"Gas para horno\",\"updatedAt\":1787000000300}],\"ingredients\":[],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[{\"deleted\":false,\"id\":\"e1\",\"name\":\"Gas para horno\",\"updatedAt\":1787000000300}],\"ingredients\":[],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "empate exacto se desempata igual",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "s1",
+          "updatedAt": 1787000000500,
+          "deleted": false,
+          "total": 10
+        }
+      ],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "s1",
+          "updatedAt": 1787000000500,
+          "deleted": false,
+          "total": 20
+        }
+      ],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"id\":\"s1\",\"total\":20,\"updatedAt\":1787000000500}],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"id\":\"s1\",\"total\":20,\"updatedAt\":1787000000500}],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "decimales y fracciones",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [
+        {
+          "id": "r1",
+          "updatedAt": 1787000000100,
+          "deleted": false,
+          "name": "Brownie",
+          "yield": 12,
+          "price": 2.5,
+          "ingredients": [
+            {
+              "name": "Harina",
+              "qty": 0.5,
+              "unit": "kg",
+              "cost": 1.25
+            }
+          ]
+        }
+      ],
+      "sales": [],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [
+        {
+          "id": "r1",
+          "updatedAt": 1787000000200,
+          "deleted": false,
+          "name": "Brownie",
+          "yield": 12,
+          "price": 2.75,
+          "ingredients": [
+            {
+              "name": "Harina",
+              "qty": 0.75,
+              "unit": "kg",
+              "cost": 1.25
+            }
+          ]
+        }
+      ],
+      "sales": [],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[{\"deleted\":false,\"id\":\"r1\",\"ingredients\":[{\"cost\":1.25,\"name\":\"Harina\",\"qty\":0.75,\"unit\":\"kg\"}],\"name\":\"Brownie\",\"price\":2.75,\"updatedAt\":1787000000200,\"yield\":12}],\"sales\":[],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[{\"deleted\":false,\"id\":\"r1\",\"ingredients\":[{\"cost\":1.25,\"name\":\"Harina\",\"qty\":0.75,\"unit\":\"kg\"}],\"name\":\"Brownie\",\"price\":2.75,\"updatedAt\":1787000000200,\"yield\":12}],\"sales\":[],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "campos desconocidos se conservan",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "s1",
+          "updatedAt": 1787000000100,
+          "deleted": false,
+          "product": "Pie",
+          "futuro": {
+            "algo": [
+              1,
+              2,
+              3
+            ],
+            "flag": true
+          }
+        }
+      ],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "s2",
+          "updatedAt": 1787000000110,
+          "deleted": false,
+          "product": "Tarta"
+        }
+      ],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"futuro\":{\"algo\":[1,2,3],\"flag\":true},\"id\":\"s1\",\"product\":\"Pie\",\"updatedAt\":1787000000100},{\"deleted\":false,\"id\":\"s2\",\"product\":\"Tarta\",\"updatedAt\":1787000000110}],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"futuro\":{\"algo\":[1,2,3],\"flag\":true},\"id\":\"s1\",\"product\":\"Pie\",\"updatedAt\":1787000000100},{\"deleted\":false,\"id\":\"s2\",\"product\":\"Tarta\",\"updatedAt\":1787000000110}],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "texto con acentos comillas y saltos",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [],
+      "expenses": [
+        {
+          "id": "e1",
+          "updatedAt": 1787000000100,
+          "deleted": false,
+          "name": "Cajas \"grandes\"\ny cintas",
+          "category": "Empaque"
+        }
+      ],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [],
+      "expenses": [
+        {
+          "id": "e2",
+          "updatedAt": 1787000000110,
+          "deleted": false,
+          "name": "Café con leche · azúcar",
+          "category": "Otro"
+        }
+      ],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[{\"category\":\"Empaque\",\"deleted\":false,\"id\":\"e1\",\"name\":\"Cajas \\\"grandes\\\"\\ny cintas\",\"updatedAt\":1787000000100},{\"category\":\"Otro\",\"deleted\":false,\"id\":\"e2\",\"name\":\"Café con leche · azúcar\",\"updatedAt\":1787000000110}],\"ingredients\":[],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[{\"category\":\"Empaque\",\"deleted\":false,\"id\":\"e1\",\"name\":\"Cajas \\\"grandes\\\"\\ny cintas\",\"updatedAt\":1787000000100},{\"category\":\"Otro\",\"deleted\":false,\"id\":\"e2\",\"name\":\"Café con leche · azúcar\",\"updatedAt\":1787000000110}],\"ingredients\":[],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "orden de entrada distinto mismo resultado",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "z",
+          "updatedAt": 1787000000100,
+          "deleted": false
+        },
+        {
+          "id": "a",
+          "updatedAt": 1787000000200,
+          "deleted": false
+        },
+        {
+          "id": "m",
+          "updatedAt": 1787000000150,
+          "deleted": false
+        }
+      ],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [
+        {
+          "id": "m",
+          "updatedAt": 1787000000150,
+          "deleted": false
+        },
+        {
+          "id": "a",
+          "updatedAt": 1787000000200,
+          "deleted": false
+        },
+        {
+          "id": "z",
+          "updatedAt": 1787000000100,
+          "deleted": false
+        }
+      ],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"id\":\"a\",\"updatedAt\":1787000000200},{\"deleted\":false,\"id\":\"m\",\"updatedAt\":1787000000150},{\"deleted\":false,\"id\":\"z\",\"updatedAt\":1787000000100}],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[{\"deleted\":false,\"id\":\"a\",\"updatedAt\":1787000000200},{\"deleted\":false,\"id\":\"m\",\"updatedAt\":1787000000150},{\"deleted\":false,\"id\":\"z\",\"updatedAt\":1787000000100}],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "documentos vacios",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[],\"ingredients\":[],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "uno vacio y otro con datos",
+    "a": {
+      "v": 2,
+      "ingredients": [],
+      "recipes": [],
+      "sales": [],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [
+        {
+          "id": "i1",
+          "updatedAt": 1787000000100,
+          "deleted": false,
+          "name": "Harina",
+          "unit": "bolsa",
+          "quantity": 5,
+          "price": 6.5,
+          "unitSingle": "lb"
+        }
+      ],
+      "recipes": [],
+      "sales": [],
+      "expenses": [],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[],\"ingredients\":[{\"deleted\":false,\"id\":\"i1\",\"name\":\"Harina\",\"price\":6.5,\"quantity\":5,\"unit\":\"bolsa\",\"unitSingle\":\"lb\",\"updatedAt\":1787000000100}],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[],\"ingredients\":[{\"deleted\":false,\"id\":\"i1\",\"name\":\"Harina\",\"price\":6.5,\"quantity\":5,\"unit\":\"bolsa\",\"unitSingle\":\"lb\",\"updatedAt\":1787000000100}],\"recipes\":[],\"sales\":[],\"updatedAt\":0,\"v\":2}"
+  },
+  {
+    "name": "todas las colecciones a la vez",
+    "a": {
+      "v": 2,
+      "ingredients": [
+        {
+          "id": "i1",
+          "updatedAt": 1787000000100,
+          "deleted": false,
+          "name": "Azúcar",
+          "quantity": 2,
+          "price": 3,
+          "unitSingle": "kg"
+        }
+      ],
+      "recipes": [
+        {
+          "id": "r1",
+          "updatedAt": 1787000000110,
+          "deleted": false,
+          "name": "Flan",
+          "yield": 8,
+          "price": 2
+        }
+      ],
+      "sales": [
+        {
+          "id": "s1",
+          "updatedAt": 1787000000120,
+          "deleted": false,
+          "product": "Flan",
+          "qty": 2,
+          "total": 4
+        }
+      ],
+      "expenses": [
+        {
+          "id": "x1",
+          "updatedAt": 1787000000130,
+          "deleted": false,
+          "name": "Gas",
+          "amount": 12,
+          "category": "Servicios"
+        }
+      ],
+      "updatedAt": 0
+    },
+    "b": {
+      "v": 2,
+      "ingredients": [
+        {
+          "id": "i2",
+          "updatedAt": 1787000000140,
+          "deleted": false,
+          "name": "Huevos",
+          "quantity": 12,
+          "price": 2.4,
+          "unitSingle": "u"
+        }
+      ],
+      "recipes": [
+        {
+          "id": "r1",
+          "updatedAt": 1787000000150,
+          "deleted": false,
+          "name": "Flan napolitano",
+          "yield": 8,
+          "price": 2.5
+        }
+      ],
+      "sales": [
+        {
+          "id": "s2",
+          "updatedAt": 1787000000160,
+          "deleted": false,
+          "product": "Cheesecake",
+          "qty": 1,
+          "total": 12
+        }
+      ],
+      "expenses": [
+        {
+          "id": "x1",
+          "deleted": true,
+          "updatedAt": 1787000000170
+        }
+      ],
+      "updatedAt": 0
+    },
+    "expectedAB": "{\"expenses\":[{\"deleted\":true,\"id\":\"x1\",\"updatedAt\":1787000000170}],\"ingredients\":[{\"deleted\":false,\"id\":\"i1\",\"name\":\"Azúcar\",\"price\":3,\"quantity\":2,\"unitSingle\":\"kg\",\"updatedAt\":1787000000100},{\"deleted\":false,\"id\":\"i2\",\"name\":\"Huevos\",\"price\":2.4,\"quantity\":12,\"unitSingle\":\"u\",\"updatedAt\":1787000000140}],\"recipes\":[{\"deleted\":false,\"id\":\"r1\",\"name\":\"Flan napolitano\",\"price\":2.5,\"updatedAt\":1787000000150,\"yield\":8}],\"sales\":[{\"deleted\":false,\"id\":\"s1\",\"product\":\"Flan\",\"qty\":2,\"total\":4,\"updatedAt\":1787000000120},{\"deleted\":false,\"id\":\"s2\",\"product\":\"Cheesecake\",\"qty\":1,\"total\":12,\"updatedAt\":1787000000160}],\"updatedAt\":0,\"v\":2}",
+    "expectedBA": "{\"expenses\":[{\"deleted\":true,\"id\":\"x1\",\"updatedAt\":1787000000170}],\"ingredients\":[{\"deleted\":false,\"id\":\"i1\",\"name\":\"Azúcar\",\"price\":3,\"quantity\":2,\"unitSingle\":\"kg\",\"updatedAt\":1787000000100},{\"deleted\":false,\"id\":\"i2\",\"name\":\"Huevos\",\"price\":2.4,\"quantity\":12,\"unitSingle\":\"u\",\"updatedAt\":1787000000140}],\"recipes\":[{\"deleted\":false,\"id\":\"r1\",\"name\":\"Flan napolitano\",\"price\":2.5,\"updatedAt\":1787000000150,\"yield\":8}],\"sales\":[{\"deleted\":false,\"id\":\"s1\",\"product\":\"Flan\",\"qty\":2,\"total\":4,\"updatedAt\":1787000000120},{\"deleted\":false,\"id\":\"s2\",\"product\":\"Cheesecake\",\"qty\":1,\"total\":12,\"updatedAt\":1787000000160}],\"updatedAt\":0,\"v\":2}"
+  }
+]
