@@ -11,70 +11,45 @@ Lo que se anota en una aparece en la otra sin tocar nada.
 
 ---
 
-## ⚠️ Faltan dos pasos, y sin ellos no se sincroniza nada
+## Estado del despliegue
 
-Los dos hay que hacerlos desde tu cuenta de Vercel; ninguno se podía hacer
-desde aquí. El código ya está listo para los dos.
+**Hecho:**
 
-### 1. Conectar un Blob Store
+- Blob Store creado y conectado — `store_cFMIRAZHGAS7bOLQ`, público
+  (`https://cfmirazhgas7bolq.public.blob.vercel-storage.com`).
+- Repositorio conectado a Vercel.
+- Rama `main` creada con este código.
 
-Ahora mismo `https://olivo-liora.vercel.app/api/data` responde:
+**Falta comprobar una cosa:** que la *Production Branch* de Vercel apunte a una
+rama que tenga este código.
 
-```json
-{ "enabled": false }
-```
+Cuando se conectó el repositorio, la rama por defecto en GitHub era
+`claude/pwa-ios-sync-441csy`, así que lo más probable es que Vercel guardara esa
+como rama de producción. Ese ajuste no cambia solo aunque después se cree `main`.
 
-Eso significa que **el proyecto no tiene un Blob Store conectado**. Sin él no
-hay dónde guardar los datos compartidos, así que cada dispositivo se queda con
-su propia copia y nunca se ven entre ellos. Es exactamente la razón por la que
-la laptop y el teléfono muestran cosas distintas.
+En Vercel, proyecto `olivo-liora` → *Settings* → *Git* → **Production Branch**:
+déjalo en `main` (recomendado) o en `claude/pwa-ios-sync-441csy`. Las dos tienen
+exactamente el mismo código.
 
-1. Entra a <https://vercel.com/dashboard> con la cuenta donde vive el proyecto
-   `olivo-liora`.
-2. Pestaña **Storage** → **Create Database** → **Blob**.
-3. Ponle un nombre (por ejemplo `olivo-liora-datos`) y créalo.
-4. En **Connect Project**, elige `olivo-liora` y conéctalo a *Production*,
-   *Preview* y *Development*.
-
-Vercel añade `BLOB_READ_WRITE_TOKEN` y redespliega solo. En cuanto la variable
-exista, la sincronización se enciende sola: no hay que cambiar una línea.
-
-### 2. Desplegar este código
-
-Lo que está publicado ahora mismo es la versión anterior, la del zip. Se puede
-comprobar: `https://olivo-liora.vercel.app/sync-core.js` responde **404**,
-porque ese archivo es nuevo.
-
-El repositorio de GitHub estaba vacío antes de este trabajo, así que el
-despliegue actual no salió de aquí (fue un `vercel deploy` desde tu máquina, o
-desde otro sitio). Hay que conectarlos, de una de estas dos formas:
-
-- **Conectar el repositorio** (recomendado, y así cada push despliega solo):
-  en Vercel, proyecto `olivo-liora` → *Settings* → *Git* → conecta
-  `Kewz4/Bakehouse-App`. Luego fusiona esta rama a `main`.
-- **O desplegar a mano** desde una copia de esta rama:
-  ```bash
-  git clone -b claude/pwa-ios-sync-441csy https://github.com/Kewz4/Bakehouse-App
-  cd Bakehouse-App && npx vercel --prod
-  ```
-
-### Comprobar que todo quedó
+### Comprobar que quedó
 
 ```bash
-curl -s https://olivo-liora.vercel.app/api/data
-# antes:   {"enabled":false, ...}
-# después: {"enabled":true,"doc":{...},"updatedAt":...}
-
 curl -s -o /dev/null -w "%{http_code}\n" https://olivo-liora.vercel.app/sync-core.js
-# antes: 404      después: 200
+# 404 = todavía está la versión vieja     200 = ya está esta
+
+curl -s https://olivo-liora.vercel.app/api/data
+# {"enabled":false}  = falta BLOB_READ_WRITE_TOKEN en el proyecto
+# {"enabled":true,…} = sincronización encendida
 ```
 
-Con esas dos cosas en verde, abre la web en la laptop y en el teléfono, anota
-una venta en uno y espera unos segundos: aparece en el otro.
+Con las dos en verde: abre la web en la laptop y en el teléfono, anota una venta
+en uno y espera unos segundos. Aparece en el otro.
 
-> El conector de Vercel de esta sesión sólo ve el team `OlivoLiora`, que está
-> vacío. El proyecto `olivo-liora` vive en otra cuenta, así que no se podía
-> tocar desde aquí.
+> Nota sobre el almacén público: el documento queda legible para cualquiera que
+> conozca su dirección
+> (`…public.blob.vercel-storage.com/datos/olivo-liora.json`). Fue una decisión
+> tomada a propósito por simplicidad. Si algún día quieres cerrarlo, es cambiar
+> `api/data.js` a un store privado y leerlo con el SDK.
 
 ---
 
