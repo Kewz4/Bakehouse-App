@@ -6,6 +6,7 @@ equipo pertenece. Se leen de ahí en vez de escribirlos a mano en el workflow
 porque si algún día se regeneran los certificados con otro identificador, la
 compilación se adapta sola en lugar de firmar una app que el iPhone rechaza.
 """
+import datetime
 import plistlib
 import shlex
 import sys
@@ -22,6 +23,21 @@ def main() -> int:
     if not app_id.startswith(team + "."):
         print(f"::error::El perfil dice equipo {team} pero la app {app_id}.", file=sys.stderr)
         return 1
+
+    # Un perfil caducado firma igual y produce un .ipa que el iPhone rechaza al
+    # instalarlo, sin decir por qué. Mejor pararlo aquí, donde se puede explicar.
+    expires = profile["ExpirationDate"]
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=datetime.timezone.utc)
+    quedan = (expires - datetime.datetime.now(datetime.timezone.utc)).days
+    if quedan < 0:
+        print(f"::error::El perfil de firma caducó el {expires:%d/%m/%Y}. "
+              "Genera uno nuevo con KravaSign y actualiza el secreto "
+              "IOS_MOBILEPROVISION_BASE64.", file=sys.stderr)
+        return 1
+    if quedan < 30:
+        print(f"::warning::Al perfil de firma le quedan {quedan} días "
+              f"(caduca el {expires:%d/%m/%Y}).", file=sys.stderr)
 
     values = {
         "UUID": profile["UUID"],

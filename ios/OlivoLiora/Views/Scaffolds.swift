@@ -175,7 +175,6 @@ extension View {
     }
 }
 
-
 /// La cabecera de una pantalla: su nombre y, si lo hay, un dato que valga la
 /// pena leer.
 ///

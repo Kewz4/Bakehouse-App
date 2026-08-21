@@ -171,7 +171,7 @@ jobs:
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
 
           echo "Identidades disponibles:"
-          security find-identity -v -p codesigning "$KEYCHAIN"
+          security find-identity -v -p codesigning "$KEYCHAIN" || true
 
           IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
             | grep -Eo '"[^"]+"' | tr -d '"' | grep -i 'distribution' | head -1 || true)
@@ -189,7 +189,11 @@ jobs:
           echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
           security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
 
-          eval "$(python3 "$GITHUB_WORKSPACE/ios/read-profile.py" "$RUNNER_TEMP/profile.plist")"
+          if ! python3 "$GITHUB_WORKSPACE/ios/read-profile.py" \
+                 "$RUNNER_TEMP/profile.plist" > "$RUNNER_TEMP/profile.env"; then
+            exit 1
+          fi
+          eval "$(cat "$RUNNER_TEMP/profile.env")"
 
           echo "Perfil $UUID · app $BUNDLE_ID · equipo $TEAM_ID · caduca $EXPIRES"
           {
