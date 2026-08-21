@@ -63,7 +63,7 @@ final class AppStore {
     var metrics: Metrics { Analytics.metrics(doc: doc, range: range) }
     var topProducts: [TopProduct] { Analytics.topProducts(doc: doc, range: range) }
     var monthlyBars: [MonthBar] { Analytics.monthlyBars(doc: doc) }
-    var alerts: [(title: String, detail: String)] { Analytics.alerts(doc) }
+    var alerts: [(title: String, detail: String)] { Analytics.alerts(doc: doc) }
 
     var recipesById: [String: Recipe] {
         Dictionary(recipes.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -74,7 +74,7 @@ final class AppStore {
 
     // MARK: - Escrituras
 
-    func upsert<T: RecordBacked>(_ item: T, into collection: Collection) {
+    func upsert<T: RecordBacked>(_ item: T, into collection: Ledger) {
         var copy = item
         copy.touch()
         var list = doc[collection].filter { $0.id != copy.id }
@@ -90,7 +90,7 @@ final class AppStore {
 
     /// Borrar deja una lápida en vez de quitar el registro. Sin ella, el
     /// borrado no viajaría y el otro dispositivo lo devolvería a la vida.
-    func delete(id: String, from collection: Collection) {
+    func delete(id: String, from collection: Ledger) {
         var list = doc[collection].filter { $0.id != id }
         list.append(MergeEngine.tombstone(id: id))
         doc[collection] = list

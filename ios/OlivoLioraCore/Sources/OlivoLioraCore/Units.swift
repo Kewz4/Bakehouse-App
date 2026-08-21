@@ -3,7 +3,7 @@ import Foundation
 /// Unidades de medida. Cada una guarda a cuánto equivale en la unidad base de
 /// su familia (masa → gramos, volumen → mililitros, conteo → unidades).
 /// Copia exacta de la tabla `UNITS` de app.js.
-public struct Unit: Hashable, Sendable {
+public struct MeasureUnit: Hashable, Sendable {
     public let key: String
     public let factor: Double
     public let family: Family
@@ -16,25 +16,25 @@ public struct Unit: Hashable, Sendable {
 }
 
 public enum Units {
-    public static let all: [Unit] = [
-        Unit(key: "g",      factor: 1,       family: .masa,    name: "gramos (g)",     short: "g"),
-        Unit(key: "kg",     factor: 1000,    family: .masa,    name: "kilos (kg)",     short: "kg"),
-        Unit(key: "lb",     factor: 453.592, family: .masa,    name: "libras (lb)",    short: "lb"),
-        Unit(key: "oz",     factor: 28.3495, family: .masa,    name: "onzas (oz)",     short: "oz"),
-        Unit(key: "ml",     factor: 1,       family: .volumen, name: "mililitros (ml)", short: "ml"),
-        Unit(key: "l",      factor: 1000,    family: .volumen, name: "litros (L)",     short: "L"),
-        Unit(key: "taza",   factor: 240,     family: .volumen, name: "tazas",          short: "taza"),
-        Unit(key: "cda",    factor: 15,      family: .volumen, name: "cucharadas",     short: "cda"),
-        Unit(key: "cdta",   factor: 5,       family: .volumen, name: "cucharaditas",   short: "cdta"),
-        Unit(key: "u",      factor: 1,       family: .conteo,  name: "unidades",       short: "u"),
-        Unit(key: "docena", factor: 12,      family: .conteo,  name: "docenas",        short: "docena")
+    public static let all: [MeasureUnit] = [
+        MeasureUnit(key: "g",      factor: 1,       family: .masa,    name: "gramos (g)",     short: "g"),
+        MeasureUnit(key: "kg",     factor: 1000,    family: .masa,    name: "kilos (kg)",     short: "kg"),
+        MeasureUnit(key: "lb",     factor: 453.592, family: .masa,    name: "libras (lb)",    short: "lb"),
+        MeasureUnit(key: "oz",     factor: 28.3495, family: .masa,    name: "onzas (oz)",     short: "oz"),
+        MeasureUnit(key: "ml",     factor: 1,       family: .volumen, name: "mililitros (ml)", short: "ml"),
+        MeasureUnit(key: "l",      factor: 1000,    family: .volumen, name: "litros (L)",     short: "L"),
+        MeasureUnit(key: "taza",   factor: 240,     family: .volumen, name: "tazas",          short: "taza"),
+        MeasureUnit(key: "cda",    factor: 15,      family: .volumen, name: "cucharadas",     short: "cda"),
+        MeasureUnit(key: "cdta",   factor: 5,       family: .volumen, name: "cucharaditas",   short: "cdta"),
+        MeasureUnit(key: "u",      factor: 1,       family: .conteo,  name: "unidades",       short: "u"),
+        MeasureUnit(key: "docena", factor: 12,      family: .conteo,  name: "docenas",        short: "docena")
     ]
 
-    private static let byKey: [String: Unit] = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
+    private static let byKey: [String: MeasureUnit] = Dictionary(uniqueKeysWithValues: all.map { ($0.key, $0) })
 
-    public static func info(_ key: String) -> Unit { byKey[key] ?? byKey["u"]! }
-    public static func family(_ key: String) -> Unit.Family { info(key).family }
-    public static func inFamily(_ family: Unit.Family) -> [Unit] { all.filter { $0.family == family } }
+    public static func info(_ key: String) -> MeasureUnit { byKey[key] ?? byKey["u"]! }
+    public static func family(_ key: String) -> MeasureUnit.Family { info(key).family }
+    public static func inFamily(_ family: MeasureUnit.Family) -> [MeasureUnit] { all.filter { $0.family == family } }
 }
 
 /// Cantidades escritas a mano.

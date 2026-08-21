@@ -1,3 +1,5 @@
+// Las unidades, el parseo de cantidades y las fórmulas de costo viven en
+// business-core.js, para poder compararlas con las de la app de iPhone.
 const $=s=>document.querySelector(s);const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n)||0);
 // ---------------------------------------------------------------------------
 // Guardado y sincronización
@@ -127,46 +129,6 @@ function arrancarVigilancia(){
  window.addEventListener('pagehide',()=>{
   if(!CLOUD||!sucio||!navigator.sendBeacon)return;
   try{navigator.sendBeacon('api/data',new Blob([JSON.stringify(toWire())],{type:'application/json'}))}catch(e){}});}
-// Unidades: cada una guarda a cuánto equivale en la unidad base de su familia
-// (masa → gramos, volumen → mililitros, conteo → unidades).
-const UNITS={
- g:{f:1,fam:'masa',n:'gramos (g)',s:'g'},
- kg:{f:1000,fam:'masa',n:'kilos (kg)',s:'kg'},
- lb:{f:453.592,fam:'masa',n:'libras (lb)',s:'lb'},
- oz:{f:28.3495,fam:'masa',n:'onzas (oz)',s:'oz'},
- ml:{f:1,fam:'volumen',n:'mililitros (ml)',s:'ml'},
- l:{f:1000,fam:'volumen',n:'litros (L)',s:'L'},
- taza:{f:240,fam:'volumen',n:'tazas',s:'taza'},
- cda:{f:15,fam:'volumen',n:'cucharadas',s:'cda'},
- cdta:{f:5,fam:'volumen',n:'cucharaditas',s:'cdta'},
- u:{f:1,fam:'conteo',n:'unidades',s:'u'},
- docena:{f:12,fam:'conteo',n:'docenas',s:'docena'}};
-const unitInfo=k=>UNITS[k]||UNITS.u;
-// Acepta "1/2", "1 1/2", "½", "media taza", "un cuarto", "2.5"…
-const FRACCIONES={'½':.5,'⅓':1/3,'⅔':2/3,'¼':.25,'¾':.75,'⅛':.125,'⅜':.375,'⅝':.625,'⅞':.875,'⅕':.2,'⅖':.4,'⅗':.6,'⅘':.8,'⅙':1/6,'⅚':5/6};
-const PALABRAS={'un':1,'una':1,'uno':1,'dos':2,'tres':3,'cuatro':4,'cinco':5,'seis':6,'siete':7,'ocho':8,'nueve':9,'diez':10,'once':11,'doce':12,
- 'medio':.5,'media':.5,'mitad':.5,'cuarto':.25,'cuarta':.25,'tercio':1/3,'tercia':1/3,'octavo':.125,'docena':12};
-function parseQty(v){if(typeof v==='number')return v;
-let t=String(v??'').toLowerCase().trim();if(!t)return 0;
-t=t.replace(/,/g,'.');
-let total=0,usado=false;
-for(const [ch,val] of Object.entries(FRACCIONES)){if(t.includes(ch)){const antes=t.split(ch)[0].trim();const n=parseFloat(antes);total+=(isFinite(n)?n:0)+val;t=t.replace(ch,' ').replace(antes,' ');usado=true}}
-if(usado)return total;
-const mixta=t.match(/^(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
-if(mixta)return +mixta[1]+(+mixta[2])/(+mixta[3]||1);
-const frac=t.match(/^(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/);
-if(frac)return (+frac[1])/(+frac[2]||1);
-const num=t.match(/^-?\d+(?:\.\d+)?/);
-if(num)return +num[0];
-// "media", "un cuarto", "dos tercios", "tres cuartos"
-const palabras=t.split(/\s+|\s*y\s*/).filter(Boolean);
-let acc=0,pend=null;
-for(const p of palabras){const w=p.replace(/s$/,'');const val=PALABRAS[w]??PALABRAS[p];
- if(val==null)continue;
- if(val>=1){if(pend==null)pend=val;else{acc+=pend*val;pend=null}}
- else{acc+=(pend??1)*val;pend=null}}
-if(pend!=null)acc+=pend;
-return acc}
 // ---- Teclado propio para cantidades ----
 // Evita que el teclado del teléfono acepte cosas raras: sólo números,
 // fracciones y "Listo". Lo que se escribe siempre es válido.
@@ -204,24 +166,14 @@ if(!pad||!pad.classList.contains('show'))return;
 if(pad.contains(e.target)||e.target===padTarget)return;
 if(e.target.dataset&&e.target.dataset.pad!=null)return;
 closePad()},true);
-// Muestra un número bonito: 0.5 -> "½", 1.25 -> "1 ¼"
-function prettyQty(n){if(!isFinite(n)||!n)return '0';
-const entero=Math.floor(n),resto=+(n-entero).toFixed(3);
-const mapa={0.5:'½',0.25:'¼',0.75:'¾',0.333:'⅓',0.667:'⅔',0.125:'⅛'};
-const frac=mapa[resto];
-if(!frac)return String(+n.toFixed(2));
-return (entero?entero+' ':'')+frac}
-const unitFamily=k=>unitInfo(k).fam;
 function unitOptions(selected,family){return Object.entries(UNITS).filter(([k,v])=>!family||v.fam===family).map(([k,v])=>`<option value="${k}" ${k===selected?'selected':''}>${v.n}</option>`).join('')}
-// costo del ingrediente por unidad base (por gramo, por ml o por unidad)
-function baseCost(ing){const q=(+ing.quantity||1)*unitInfo(ing.unitSingle).f;return (+ing.price||0)/(q||1)}
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate=d=>{if(!d)return '—';const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:d};
 let toastTimer;function toast(msg,isError){const t=$('#toast');t.textContent=msg;t.className='show'+(isError?' err':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='',isError?4200:2400)}
 function go(view){if(!document.getElementById(view))view='dashboard';document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===view));$('#fab').dataset.view=view;window.scrollTo({top:0,behavior:'smooth'});try{history.replaceState(null,'','#'+view)}catch(e){}}
 function fabAction(){({dashboard:openSale,recipes:openRecipe,sales:openSale,expenses:openExpense,inventory:openIngredient}[$('#fab').dataset.view||'dashboard'])()}
 function nav(){document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));go((location.hash||'#dashboard').slice(1));window.addEventListener('hashchange',()=>go(location.hash.slice(1)))}
-function recipeCost(r){return (r.ingredients||[]).reduce((s,i)=>s+(+i.qty||0)*(+i.cost||0),0)}function recipePrice(r){return +r.price||0}function recipeUnitCost(r){return recipeCost(r)/(+r.yield||1)}function recipeMargin(r){const p=recipePrice(r);return p?(p-recipeUnitCost(r))/p*100:0}function suggestPrice(r,target=65){return recipeUnitCost(r)/(1-target/100)}function render(){const sales=data.sales.reduce((a,s)=>a+(+s.total||0),0),production=data.sales.reduce((a,s)=>{let r=data.recipes.find(x=>x.id===s.recipeId);return a+(r?recipeUnitCost(r)*(+s.qty||0):0)},0),expenses=data.expenses.reduce((a,e)=>a+(+e.amount||0),0),profit=sales-production-expenses;$('#mSales').textContent=money(sales);$('#mCost').textContent=money(production);$('#mExpenses').textContent=money(expenses);$('#mProfit').textContent=money(profit);$('#mMargin').textContent=sales?'Te quedan '+Math.round(profit/sales*100)+' centavos de cada dólar':'Aún sin ventas';renderRecipes();renderTables();renderChart(sales);renderAlerts()}
+function render(){const sales=data.sales.reduce((a,s)=>a+(+s.total||0),0),production=data.sales.reduce((a,s)=>{let r=data.recipes.find(x=>x.id===s.recipeId);return a+(r?recipeUnitCost(r)*(+s.qty||0):0)},0),expenses=data.expenses.reduce((a,e)=>a+(+e.amount||0),0),profit=sales-production-expenses;$('#mSales').textContent=money(sales);$('#mCost').textContent=money(production);$('#mExpenses').textContent=money(expenses);$('#mProfit').textContent=money(profit);$('#mMargin').textContent=sales?'Te quedan '+Math.round(profit/sales*100)+' centavos de cada dólar':'Aún sin ventas';renderRecipes();renderTables();renderChart(sales);renderAlerts()}
 function renderRecipes(){const q=(($('#recipeSearch')||{}).value||'').toLowerCase().trim();const list=data.recipes.filter(r=>!q||(r.name||'').toLowerCase().includes(q));const el=$('#recipesList');el.innerHTML=list.length?list.map(r=>{const c=recipeCost(r),u=recipeUnitCost(r),p=recipePrice(r),m=recipeMargin(r),cls=!p?'warn':m>=60?'ok':m>=45?'warn':'bad';return `<article class="recipe">${r.photo?`<img class="recipe-photo" src="${esc(r.photo)}" alt="${esc(r.name)}" loading="lazy">`:''}<span class="tag">${esc(r.yield)} porciones</span><h3>${esc(r.name)}</h3><small>${(r.ingredients||[]).length} ingredientes · costo por porción ${money(u)}</small><div class="recipe-data"><div><span>Costo total</span><b>${money(c)}</b></div><div><span>Precio / porción</span><b>${money(p)}</b></div></div><span class="badge ${cls}">${p?`Ganas ${m.toFixed(0)}% de cada venta`:'Falta ponerle precio'}</span>${p&&m<60?`<p class="helper">Cobrando <b>${money(suggestPrice(r))}</b> ganarías más</p>`:''}<div class="recipe-actions"><button onclick="openRecipe('${r.id}')">Editar</button><button onclick="duplicateRecipe('${r.id}')">Duplicar</button><button onclick="quickFromRecipe('${r.id}')">Calcular precio</button><button class="negative" onclick="removeItem('recipes','${r.id}')">Eliminar</button></div></article>`}).join(''):`<div class="empty">${q?'Ninguna receta coincide con tu búsqueda.':'Crea tu primer postre y calcula en un minuto cuánto cobrar.'}</div>`}
 function duplicateRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;data.recipes.push(sello({...r,id:crypto.randomUUID(),name:r.name+' (copia)',ingredients:(r.ingredients||[]).map(i=>({...i}))}));save('Receta duplicada')}
 function quickFromRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;go('recipes');$('#quickCost').value=recipeUnitCost(r).toFixed(2);quickCalc();$('#quickCost').scrollIntoView({behavior:'smooth',block:'center'});toast('Listo: costo de una porción de '+r.name)}

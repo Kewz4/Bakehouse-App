@@ -44,7 +44,7 @@ public struct Record: Hashable, Sendable {
 }
 
 /// Las cuatro listas que forman los datos del negocio.
-public enum Collection: String, CaseIterable, Sendable {
+public enum Ledger: String, CaseIterable, Sendable {
     case ingredients, recipes, sales, expenses
 }
 
@@ -58,7 +58,7 @@ public struct SyncDocument: Hashable, Sendable {
 
     public init() {}
 
-    public subscript(c: Collection) -> [Record] {
+    public subscript(c: Ledger) -> [Record] {
         get {
             switch c {
             case .ingredients: return ingredients
@@ -78,14 +78,14 @@ public struct SyncDocument: Hashable, Sendable {
     }
 
     /// Los registros que la usuaria ve: sin lápidas.
-    public func live(_ c: Collection) -> [Record] { self[c].filter { !$0.deleted } }
+    public func live(_ c: Ledger) -> [Record] { self[c].filter { !$0.deleted } }
 
     public var isEmpty: Bool {
-        Collection.allCases.allSatisfy { self[$0].isEmpty }
+        Ledger.allCases.allSatisfy { self[$0].isEmpty }
     }
 
     public var recordCount: Int {
-        Collection.allCases.reduce(0) { $0 + self[$1].count }
+        Ledger.allCases.reduce(0) { $0 + self[$1].count }
     }
 
     /// Misma cadena que produce `SyncCore.canonical(doc)` en JavaScript.
@@ -96,7 +96,7 @@ public struct SyncDocument: Hashable, Sendable {
             "v": .number(Double(MergeEngine.documentVersion)),
             "updatedAt": .number(updatedAt)
         ]
-        for c in Collection.allCases {
+        for c in Ledger.allCases {
             o[c.rawValue] = .array(self[c].map { JSONValue.object($0.fields) })
         }
         return JSONValue.object(o).canonical
@@ -156,7 +156,7 @@ public enum MergeEngine {
 
     public static func normalize(document raw: SyncDocument) -> SyncDocument {
         var out = SyncDocument()
-        for c in Collection.allCases { out[c] = dedupe(raw[c]) }
+        for c in Ledger.allCases { out[c] = dedupe(raw[c]) }
         out.updatedAt = raw.updatedAt > 0 ? raw.updatedAt.rounded(.down) : 0
         return out
     }
@@ -164,7 +164,7 @@ public enum MergeEngine {
     /// Combina dos documentos. Conmutativa, asociativa e idempotente.
     public static func merge(_ local: SyncDocument, _ remote: SyncDocument) -> SyncDocument {
         var out = SyncDocument()
-        for c in Collection.allCases {
+        for c in Ledger.allCases {
             var byId: [String: Record] = [:]
             for rec in local[c] { byId[rec.id] = byId[rec.id].map { pickWinner($0, rec) } ?? rec }
             for rec in remote[c] { byId[rec.id] = byId[rec.id].map { pickWinner($0, rec) } ?? rec }
@@ -177,7 +177,7 @@ public enum MergeEngine {
     /// Quita lápidas antiguas para que el documento no crezca sin límite.
     public static func purgeTombstones(_ doc: inout SyncDocument, now: Double = MergeEngine.now()) {
         let cutoff = now - tombstoneTTL
-        for c in Collection.allCases {
+        for c in Ledger.allCases {
             doc[c] = doc[c].filter { !($0.deleted && $0.updatedAt < cutoff) }
         }
     }
@@ -192,7 +192,7 @@ public enum MergeEngine {
     /// Sirve para confirmar que el servidor recibió lo nuestro antes de dar la
     /// sincronización por buena.
     public static func contains(_ haystack: SyncDocument, _ needle: SyncDocument) -> Bool {
-        for c in Collection.allCases {
+        for c in Ledger.allCases {
             var index: [String: Record] = [:]
             for rec in haystack[c] { index[rec.id] = rec }
             for mine in needle[c] {
@@ -214,7 +214,7 @@ extension SyncDocument: Codable {
     public init(from decoder: Decoder) throws {
         self.init()
         let c = try decoder.container(keyedBy: CodingKeys.self)
-        for col in Collection.allCases {
+        for col in Ledger.allCases {
             let key = CodingKeys(stringValue: col.rawValue)!
             let raw = (try? c.decode([JSONValue].self, forKey: key)) ?? []
             self[col] = raw.compactMap { $0.objectValue.flatMap(MergeEngine.normalize) }
@@ -226,7 +226,7 @@ extension SyncDocument: Codable {
     public func encode(to encoder: Encoder) throws {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(MergeEngine.documentVersion, forKey: .v)
-        for col in Collection.allCases {
+        for col in Ledger.allCases {
             let key = CodingKeys(stringValue: col.rawValue)!
             try c.encode(self[col].map { JSONValue.object($0.fields) }, forKey: key)
         }

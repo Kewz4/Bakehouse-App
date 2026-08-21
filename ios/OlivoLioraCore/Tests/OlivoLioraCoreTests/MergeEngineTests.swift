@@ -16,16 +16,16 @@ final class MergeEngineTests: XCTestCase {
         return Record(fields)
     }
 
-    func doc(_ c: Collection, _ list: [Record]) -> SyncDocument {
+    func doc(_ c: Ledger, _ list: [Record]) -> SyncDocument {
         var d = SyncDocument(); d[c] = list; return d
     }
 
-    func ids(_ d: SyncDocument, _ c: Collection) -> [String] {
+    func ids(_ d: SyncDocument, _ c: Ledger) -> [String] {
         d.live(c).map(\.id).sorted()
     }
 
     func canon(_ d: SyncDocument) -> String {
-        Collection.allCases.map { c in d[c].map(\.canonical).joined(separator: "|") }.joined(separator: "#")
+        Ledger.allCases.map { c in d[c].map(\.canonical).joined(separator: "|") }.joined(separator: "#")
     }
 
     func testNewerRecordWins() {

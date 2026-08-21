@@ -284,7 +284,7 @@ private struct LineEditor: View {
 
     /// Sólo se ofrecen unidades de la misma familia que el ingrediente: si se
     /// compra en libras se puede usar en gramos, pero nunca en mililitros.
-    private var unitChoices: [Unit] {
+    private var unitChoices: [MeasureUnit] {
         guard let ing = ingredient else { return Units.all }
         return Units.inFamily(Units.family(ing.unitSingle))
     }
@@ -333,7 +333,9 @@ private struct LineEditor: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Unidad").font(Theme.rounded(12, .bold)).foregroundStyle(Theme.muted)
                     Picker("Unidad", selection: $line.unit) {
-                        ForEach(unitChoices, id: \.key) { Text($0.short).tag($0.key) }
+                        ForEach(unitChoices, id: \.key) { (u: MeasureUnit) in
+                            Text(u.short).tag(u.key)
+                        }
                     }
                     .pickerStyle(.menu)
                     .tint(Theme.green)
