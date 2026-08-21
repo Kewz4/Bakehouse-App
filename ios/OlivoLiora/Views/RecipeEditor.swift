@@ -369,7 +369,16 @@ struct RecipeEditor: View {
         let scale = min(1, maxSide / max(side, 1))
         let target = CGSize(width: image.size.width * scale, height: image.size.height * scale)
 
-        let renderer = UIGraphicsImageRenderer(size: target)
+        // `scale = 1` es imprescindible. Por defecto UIGraphicsImageRenderer usa
+        // la escala de la pantalla, así que en un iPhone 3x "reducir a 1280 px"
+        // producía en realidad 3840 px: nueve veces los píxeles y varios MB al
+        // codificar. En el navegador el canvas redimensiona exacto, y por eso
+        // la misma foto funcionaba desde la laptop y fallaba desde el teléfono.
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = 1
+        format.opaque = true
+
+        let renderer = UIGraphicsImageRenderer(size: target, format: format)
         let resized = renderer.image { ctx in
             UIColor.white.setFill()
             ctx.fill(CGRect(origin: .zero, size: target))

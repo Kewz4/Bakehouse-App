@@ -163,9 +163,12 @@ actor SyncClient {
         // de los 20 s que valen para el resto de peticiones. Con el timeout
         // corto, una lectura que iba bien se veía como "no pude leerla".
         req.timeoutInterval = 60
+        // JSONSerialization lanza con NaN o infinito, y ese error se vería como
+        // "no pude leer la etiqueta" sin que la etiqueta tuviera nada que ver.
+        let safeQty = packageQty.isFinite ? packageQty : 0
         req.httpBody = try JSONSerialization.data(withJSONObject: [
             "dataUrl": dataURL,
-            "paquete": ["cantidad": packageQty, "unitSingle": packageUnit]
+            "paquete": ["cantidad": safeQty, "unitSingle": packageUnit]
         ])
 
         let (data, response) = try await session.data(for: req)
