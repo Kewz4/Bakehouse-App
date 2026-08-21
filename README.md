@@ -72,6 +72,73 @@ uno y espera unos segundos. Aparece en el otro.
 
 ---
 
+## Información nutricional y etiquetas de dieta
+
+Cada ingrediente puede llevar, **opcionalmente**, sus macros por 100 g (o 100 ml,
+o 100 unidades): calorías, proteína, carbohidratos, azúcares, grasa, grasa
+saturada, fibra y sodio. Las recetas los suman.
+
+### Leer la etiqueta con la cámara
+
+Ella toma una foto de la tabla nutricional y los campos se llenan solos.
+
+Para que funcione hace falta una variable en Vercel:
+
+1. Proyecto `olivo-liora` → **Settings** → **Environment Variables**.
+2. Añade `GROQ_API_KEY` con tu llave de Groq (`gsk_…`), en *Production*,
+   *Preview* y *Development*.
+3. **Redespliega** (añadir una variable no redespliega solo).
+
+Comprobación: `curl -s https://olivo-liora.vercel.app/api/vision` debe decir
+`{"enabled":true}`. Si dice `false`, el botón de la cámara sencillamente no
+aparece y los campos se escriben a mano — la app no se rompe.
+
+> La llave vive **sólo en el servidor**. No está en el repositorio ni viaja al
+> navegador ni a la app: `api/vision.js` hace la llamada y devuelve únicamente
+> el resultado. Meterla en `app.js` la dejaría a la vista de cualquiera que
+> abriera la página, y este repositorio es público.
+
+**Cómo se reparte el trabajo con el modelo** (`qwen/qwen3.6-27b` en Groq): el
+modelo SÓLO copia lo que ve y dice si la tabla es "por porción" o "por 100 g".
+Las cuentas —pasar de una cosa a la otra— se hacen en `business-core.js`. Es a
+propósito: un modelo que divide mal produce un número igual de convincente que
+uno bien calculado, y aquí un error acaba en un precio mal puesto. Si la
+etiqueta no dice cuánto pesa una porción pero sí cuántas trae el envase, se
+deduce con lo que ella ya escribió del paquete.
+
+### Etiquetas de dieta
+
+Cuando una receta tiene los macros **de todos** sus ingredientes, se le ponen
+etiquetas automáticas: 🍭 Sin azúcar, 🍬 Bajo en azúcar, 🥑 Keto, 💪 GymReady,
+🌾 Alta en fibra, 🪶 Bajo en grasa, 🧂 Bajo en sodio, 🥥 Paleo. Se puede filtrar
+la lista de recetas por cualquiera de ellas.
+
+| etiqueta | regla (por porción) |
+|---|---|
+| Sin azúcar | 0.5 g de azúcar o menos |
+| Bajo en azúcar | entre 0.5 y 5 g — aquí caen los postres endulzados con fruta |
+| Keto | carbohidratos netos ≤ 10 g y ≥ 60 % de las calorías vienen de grasa |
+| GymReady | ≥ 10 g de proteína y ≥ 20 % de las calorías |
+| Alta en fibra | ≥ 5 g |
+| Bajo en grasa | ≤ 3 g |
+| Bajo en sodio | ≤ 140 mg |
+| Paleo | por ingredientes, no por macros (ver abajo) |
+
+**Si falta la información de un solo ingrediente, la receta no lleva ninguna
+etiqueta.** No es una limitación: son afirmaciones sobre salud. Un "Sin azúcar"
+calculado con tres de cinco ingredientes no es un dato incompleto, es uno falso,
+y alguien que evita el azúcar por indicación médica podría creerlo. En ese caso
+la tarjeta dice qué falta por llenar.
+
+**Paleo es la excepción**: no se puede deducir de los macros, porque no depende
+de las cantidades sino de qué lleva la receta. Se decide por el nombre de los
+ingredientes contra una lista de palabras (harina de trigo, azúcar, lácteos,
+suero, legumbres…), con excepciones para que "harina de almendra" no quede
+descartada por decir "harina". Ante la duda, no se pone. Es una ayuda, no un
+certificado.
+
+---
+
 ## Cómo funciona la sincronización
 
 El problema no era que faltara sincronización, sino que la que había podía

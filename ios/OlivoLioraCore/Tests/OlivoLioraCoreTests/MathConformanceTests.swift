@@ -44,6 +44,19 @@ final class MathConformanceTests: XCTestCase {
             let total: Int
             let completo: Bool
         }
+        struct BadgeCase: Decodable {
+            struct Line: Decodable {
+                let ingredientId: String?; let qty: Double; let unit: String
+            }
+            struct Input: Decodable {
+                let name: String; let yield: Double; let ingredients: [Line]
+            }
+            let `in`: Input
+            let badges: [String]
+            let motivo: String?
+        }
+        let badgeIngredients: [String: JSONValue]
+        let badgeRecipes: [BadgeCase]
         let macroIngredients: [String: JSONValue]
         let macroRecipes: [MacroRecipeCase]
         let parseQty: [ParseCase]
@@ -156,5 +169,59 @@ final class MathConformanceTests: XCTestCase {
         // Y quitar el último dato deja el ingrediente sin macros del todo.
         azucar.setMacro(.grasa, nil)
         XCTAssertFalse(azucar.hasMacros)
+    }
+
+    /// Las etiquetas de dieta tienen que salir idénticas en los dos lados,
+    /// incluidas las que NO se ponen. Que el teléfono diga "Sin azúcar" donde
+    /// la laptop no lo dice sería peor que no tener etiquetas.
+    func testDietBadgesMatchJavaScript() throws {
+        let f = try load()
+
+        var ingredients: [String: Ingredient] = [:]
+        for (id, raw) in f.badgeIngredients {
+            guard let obj = raw.objectValue else { continue }
+            var rec = Record(obj)
+            rec.id = id
+            ingredients[id] = Ingredient(record: rec)
+        }
+        XCTAssertFalse(ingredients.isEmpty)
+
+        for c in f.badgeRecipes {
+            let lines = c.in.ingredients.map {
+                RecipeLine(ingredientId: $0.ingredientId, name: "x",
+                           qty: $0.qty, unit: $0.unit, cost: 0)
+            }
+            let recipe = Recipe(name: c.in.name, yield: c.in.yield, price: 0, lines: lines)
+            let got = Badges.evaluate(recipe: recipe, ingredients: ingredients)
+
+            XCTAssertEqual(got.badges.map(\.key), c.badges,
+                           "«\(c.in.name)»: etiquetas distintas entre Swift y JavaScript")
+        }
+    }
+
+    /// Una receta a la que le falten datos no lleva NINGUNA etiqueta, pase lo
+    /// que pase con los ingredientes que sí tienen. Es la regla que impide
+    /// afirmar algo sobre salud a partir de información incompleta.
+    func testIncompleteRecipeGetsNoBadges() throws {
+        let f = try load()
+        let incomplete = f.badgeRecipes.first { $0.motivo == "faltan-datos" }
+        let c = try XCTUnwrap(incomplete, "hace falta un caso con datos incompletos")
+
+        var ingredients: [String: Ingredient] = [:]
+        for (id, raw) in f.badgeIngredients {
+            guard let obj = raw.objectValue else { continue }
+            var rec = Record(obj); rec.id = id
+            ingredients[id] = Ingredient(record: rec)
+        }
+        let lines = c.in.ingredients.map {
+            RecipeLine(ingredientId: $0.ingredientId, name: "x",
+                       qty: $0.qty, unit: $0.unit, cost: 0)
+        }
+        let got = Badges.evaluate(
+            recipe: Recipe(name: c.in.name, yield: c.in.yield, price: 0, lines: lines),
+            ingredients: ingredients)
+
+        XCTAssertTrue(got.badges.isEmpty)
+        XCTAssertEqual(got.reason, .missingData)
     }
 }

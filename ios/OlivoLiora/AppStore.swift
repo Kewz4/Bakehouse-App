@@ -89,6 +89,27 @@ final class AppStore {
         Analytics.macros(for: recipe, ingredients: ingredientsById)
     }
 
+    /// Etiquetas de dieta de una receta.
+    func badges(of recipe: Recipe) -> BadgeResult {
+        Badges.evaluate(recipe: recipe, ingredients: ingredientsById)
+    }
+
+    /// Sólo las etiquetas que alguna receta tiene de verdad, con su cuenta.
+    /// Ofrecer un filtro que no devuelve nada es peor que no ofrecerlo.
+    var availableBadges: [(badge: DietBadge, count: Int)] {
+        let index = ingredientsById
+        var counts: [String: Int] = [:]
+        for recipe in recipes {
+            for b in Badges.evaluate(recipe: recipe, ingredients: index).badges {
+                counts[b.key, default: 0] += 1
+            }
+        }
+        return Badges.all.compactMap { b in
+            guard let n = counts[b.key] else { return nil }
+            return (b, n)
+        }
+    }
+
     func recipe(id: String) -> Recipe? { recipesById[id] }
     func profit(of sale: Sale) -> Double { Analytics.profit(of: sale, recipes: recipesById) }
 

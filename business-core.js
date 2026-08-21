@@ -201,7 +201,8 @@ const BADGES=[
 // Paleo NO se puede deducir de los macros: no es una cuestión de cantidades
 // sino de qué lleva la receta. Se mira por nombre de ingrediente, y por eso es
 // deliberadamente estricta: ante la duda, no se pone.
-const NO_PALEO=['harina','trigo','azucar','azúcar','leche','crema','queso',
+const NO_PALEO=['suero','caseina','caseína','gluten','centeno','cebada','malta','nata','condensada',
+ 'harina','trigo','azucar','azúcar','leche','crema','queso',
  'mantequilla','yogur','yoghurt','maiz','maíz','arroz','avena','frijol','soya',
  'lenteja','garbanzo','cacahuate','maní','mani','levadura','margarina','pan',
  'galleta','cereal','sirope','jarabe'];

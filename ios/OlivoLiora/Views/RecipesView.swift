@@ -9,11 +9,17 @@ struct RecipesView: View {
     @State private var calcCost = ""
     @State private var calcPercent = "65"
     @State private var calcMode: PriceCalculator.Mode = .margin
+    /// Etiqueta por la que se está filtrando. Vacío = todas.
+    @State private var badgeFilter = ""
 
     private var filtered: [Recipe] {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return q.isEmpty ? store.recipes
-            : store.recipes.filter { $0.name.lowercased().contains(q) }
+        return store.recipes.filter { recipe in
+            let matchesText = q.isEmpty || recipe.name.lowercased().contains(q)
+            guard matchesText else { return false }
+            guard !badgeFilter.isEmpty else { return true }
+            return store.badges(of: recipe).badges.contains { $0.key == badgeFilter }
+        }
     }
 
     var body: some View {
@@ -25,6 +31,8 @@ struct RecipesView: View {
                     BrandHeader(subtitle: "Recetas y precios")
                     SectionHeading(eyebrow: "Tus postres", title: "Recetas & precios")
                 }
+                badgeFilterRow
+
                 if filtered.isEmpty {
                     EmptyHint(text: search.isEmpty
                         ? "Crea tu primer postre y calcula en un minuto cuánto cobrar."
@@ -37,6 +45,7 @@ struct RecipesView: View {
                 RecipeCard(
                     recipe: recipe,
                     macros: store.macros(of: recipe),
+                    badges: store.badges(of: recipe),
                     onDuplicate: { store.duplicate(recipe) },
                     onUseInCalculator: {
                         calcCost = String(format: "%.2f", recipe.unitCost)
@@ -67,6 +76,45 @@ struct RecipesView: View {
         .sheet(isPresented: $creating) { RecipeEditor(recipe: nil) }
         .sheet(item: $editing) { RecipeEditor(recipe: $0) }
     }
+
+    /// Chips para filtrar por dieta. Sólo salen las etiquetas que alguna receta
+    /// tiene, así que tocar cualquiera siempre devuelve algo.
+    @ViewBuilder
+    private var badgeFilterRow: some View {
+        let available = store.availableBadges
+        if !available.isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(available, id: \.badge.key) { item in
+                        Button {
+                            badgeFilter = (badgeFilter == item.badge.key) ? "" : item.badge.key
+                        } label: {
+                            HStack(spacing: 4) {
+                                Text(item.badge.label)
+                                Text("\(item.count)").opacity(0.6)
+                            }
+                            .font(Theme.rounded(12, .semibold))
+                            .padding(.horizontal, 12).padding(.vertical, 9)
+                            .background(badgeFilter == item.badge.key ? Theme.green : Color.white,
+                                        in: Capsule())
+                            .foregroundStyle(badgeFilter == item.badge.key ? .white : Theme.muted)
+                            .overlay(Capsule().stroke(
+                                badgeFilter == item.badge.key ? Theme.green : Theme.line, lineWidth: 1))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    if !badgeFilter.isEmpty {
+                        Button("Ver todas") { badgeFilter = "" }
+                            .font(Theme.rounded(12, .semibold))
+                            .foregroundStyle(Theme.green)
+                            .padding(.horizontal, 12).padding(.vertical, 9)
+                            .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+    }
 }
 
 // MARK: - Tarjeta de receta
@@ -74,6 +122,7 @@ struct RecipesView: View {
 struct RecipeCard: View {
     let recipe: Recipe
     let macros: RecipeMacros
+    let badges: BadgeResult
     let onDuplicate: () -> Void
     let onUseInCalculator: () -> Void
 
@@ -143,6 +192,16 @@ struct RecipeCard: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .background(Color(hex: 0xEEF4EA),
                                     in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                }
+
+                if !badges.badges.isEmpty {
+                    // Envolvemos en filas: pueden salir varias etiquetas.
+                    FlowChips(badges: badges.badges)
+                } else if badges.reason == .missingData {
+                    Text("Añade la información nutricional de todos los ingredientes para ver etiquetas como “Sin azúcar” o “Keto”.")
+                        .font(Theme.rounded(11))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 HStack(spacing: 4) {
@@ -280,5 +339,34 @@ struct TipsPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
         .panelCard()
+    }
+}
+
+/// Etiquetas de dieta en varias filas, sin que se salgan de la tarjeta.
+struct FlowChips: View {
+    let badges: [DietBadge]
+
+    var body: some View {
+        // Dos por fila: los nombres son cortos y así no hay que medir texto.
+        let rows = stride(from: 0, to: badges.count, by: 2).map { i in
+            Array(badges[i..<min(i + 2, badges.count)])
+        }
+        VStack(alignment: .leading, spacing: 5) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(spacing: 5) {
+                    ForEach(row) { badge in
+                        Text(badge.label)
+                            .font(Theme.rounded(11, .heavy))
+                            .foregroundStyle(Color(hex: 0x2F6B45))
+                            .lineLimit(1)
+                            .padding(.horizontal, 9).padding(.vertical, 5)
+                            .background(Color(hex: 0xEEF4EA), in: Capsule())
+                            .overlay(Capsule().stroke(Color(hex: 0xD7E6D5), lineWidth: 1))
+                            .accessibilityLabel("\(badge.name). \(badge.detail)")
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
     }
 }
