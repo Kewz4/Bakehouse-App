@@ -79,21 +79,22 @@ function baseCost(ing){const q=(+ing.quantity||1)*unitInfo(ing.unitSingle).f;ret
 /**
  * A cuánto sale el ingrediente, en una unidad que se pueda leer.
  *
- * Decir "$0.00 por g" es inútil: una harina de $1.25 la bolsa de 459 g cuesta
- * $0.0027 el gramo, y a dos decimales eso es cero. No era un cálculo malo, era
- * una unidad mal elegida.
- *
- * Se busca la unidad más pequeña de su misma familia con la que el número pase
- * de 10 centavos, que es donde deja de parecer cero: esa harina sale "$1.23 por
- * lb" y los huevos siguen saliendo "$0.20 por u".
+ * Manda la unidad que ELLA eligió: si compra la harina en kilos, quiere verla
+ * en kilos, no en onzas. Sólo se cambia cuando su unidad daría "$0.00" —una
+ * harina de $1.25 la bolsa de 459 g sale a $0.0027 el gramo, y a dos decimales
+ * eso es cero—; ahí se sube a la unidad más pequeña que pase de 10 centavos.
  */
-const COST_MIN=0.10;
+const COST_READABLE=0.01;   // por debajo de esto se ve como "$0.00"
+const COST_MIN=0.10;        // al subir de unidad, se busca al menos esto
 function displayCost(ing){
  const porBase=baseCost(ing);
+ const propia=unitInfo(ing.unitSingle);
+ // Su unidad, si se lee bien.
+ if(porBase*propia.f>=COST_READABLE)return {amount:porBase*propia.f,unit:propia.s};
  const fam=unitFamily(ing.unitSingle);
  const opciones=Object.entries(UNITS).filter(([k,v])=>v.fam===fam)
    .sort((a,b)=>a[1].f-b[1].f);
- if(!opciones.length)return {amount:porBase,unit:unitInfo(ing.unitSingle).s};
+ if(!opciones.length)return {amount:porBase*propia.f,unit:propia.s};
  const elegida=opciones.find(([k,v])=>porBase*v.f>=COST_MIN)||opciones[opciones.length-1];
  return {amount:porBase*elegida[1].f,unit:elegida[1].s}}
 
@@ -113,6 +114,7 @@ const MACROS=[
  {k:'proteina',      n:'Proteína',        u:'g'},
  {k:'carbohidratos', n:'Carbohidratos',   u:'g'},
  {k:'azucar',        n:'Azúcares',        u:'g'},
+ {k:'azucarAnadida', n:'Azúcares añadidos',u:'g'},
  {k:'grasa',         n:'Grasa',           u:'g'},
  {k:'grasaSaturada', n:'Grasa saturada',  u:'g'},
  {k:'fibra',         n:'Fibra',           u:'g'},
@@ -210,12 +212,8 @@ function normalizarEtiqueta(lectura,paquete){
 // ingredientes no es un dato incompleto: es un dato falso, y alguien que evita
 // el azúcar por salud podría creerlo.
 const BADGES=[
- {k:'sinAzucar', n:'Sin azúcar',      emoji:'🍭',
-  d:'Menos de 0.5 g de azúcar por porción',
-  test:p=>p.azucar<=0.5},
- {k:'bajoAzucar',n:'Bajo en azúcar',  emoji:'🍬',
-  d:'5 g de azúcar o menos por porción',
-  test:p=>p.azucar>0.5&&p.azucar<=5},
+// Las dos de azúcar se deciden aparte, en recipeBadges(): dependen de la
+// azúcar AÑADIDA y de si la receta lleva fruta, no sólo de los macros.
  {k:'keto',      n:'Keto',            emoji:'🥑',
   d:'Pocos carbohidratos netos y mayoría de calorías de grasa',
   test:p=>p.calorias>0&&(p.carbohidratos-(p.fibra||0))<=10&&(p.grasa*9)/p.calorias>=0.6},
@@ -231,6 +229,25 @@ const BADGES=[
  {k:'bajoSodio', n:'Bajo en sodio',   emoji:'🧂',
   d:'140 mg de sodio o menos por porción',
   test:p=>p.sodioMg<=140}];
+
+// La fruta lleva fructosa aunque no tenga azúcar añadida, así que una receta
+// con fruta nunca es "sin azúcar": es "baja en azúcar". Se detecta por el
+// nombre, pero `fruta: true/false` en el ingrediente manda sobre eso — así una
+// ralladura de limón se puede desmarcar a mano.
+//
+// El coco queda fuera a propósito: la harina y la leche de coco casi no traen
+// azúcar y marcarlas como fruta arruinaría las recetas keto.
+const FRUTAS=['fresa','frambuesa','mora','zarzamora','arandano','arándano','blueberry',
+ 'mango','banano','banana','platano','plátano','manzana','pera','piña','pina','durazno',
+ 'melocoton','melocotón','cereza','uva','pasas','naranja','mandarina','limon','limón',
+ 'kiwi','papaya','sandia','sandía','melon','melón','maracuya','maracuyá','guayaba',
+ 'datil','dátil','higo','ciruela','granada','tamarindo','maranon','marañón','jocote',
+ 'mamey','zapote','anona','nispero','níspero','lichi','carambola','fruta'];
+function esFruta(ing){
+ if(!ing)return false;
+ if(typeof ing.fruta==='boolean')return ing.fruta;      // lo que ella decidió
+ const n=String(ing.name||'').toLowerCase();
+ return FRUTAS.some(f=>n.includes(f))}
 
 // Paleo NO se puede deducir de los macros: no es una cuestión de cantidades
 // sino de qué lleva la receta. Se mira por nombre de ingrediente, y por eso es
@@ -266,6 +283,26 @@ function recipeBadges(r,ingredientsById){
  const out=BADGES.filter(b=>{try{return b.test(p)}catch(e){return false}})
                  .map(b=>({k:b.k,n:b.n,emoji:b.emoji,d:b.d}));
 
+ // --- Azúcar -------------------------------------------------------------
+ // "Sin azúcar" en el mercado quiere decir SIN AZÚCAR AÑADIDA: la leche tiene
+ // lactosa y sigue vendiéndose como sin azúcar. Por eso se mira la añadida y
+ // no la total. La excepción es la fruta: su fructosa es azúcar de verdad para
+ // quien la cuenta, así que una receta con fruta nunca pasa de "baja".
+ //
+ // Si algún ingrediente no declara la azúcar añadida no se pone ninguna de las
+ // dos: es una afirmación sobre salud y no se hace a medias.
+ const usadas=(r.ingredients||[]).map(l=>ingredientsById[l.ingredientId]).filter(Boolean);
+ const sabemosAnadida=usadas.length===(r.ingredients||[]).length&&
+   usadas.every(i=>i.macros&&i.macros.azucarAnadida!=null&&isFinite(+i.macros.azucarAnadida));
+ if(sabemosAnadida){
+  const anadida=p.azucarAnadida;
+  const conFruta=usadas.some(esFruta);
+  if(anadida<=0.5&&!conFruta){
+   out.unshift({k:'sinAzucar',n:'Sin azúcar',emoji:'🍭',d:'Sin azúcar añadida'})}
+  else if(anadida<=5){
+   out.unshift({k:'bajoAzucar',n:'Bajo en azúcar',emoji:'🍬',
+    d:conFruta?'Sin azúcar añadida, pero lleva fruta (fructosa)':'Poca azúcar añadida: 5 g o menos por porción'})}}
+
  // Paleo se evalúa aparte, sobre los ingredientes de verdad.
  const usados=(r.ingredients||[]).map(l=>ingredientsById[l.ingredientId]).filter(Boolean);
  if(usados.length===(r.ingredients||[]).length&&esPaleo(usados)){
@@ -274,17 +311,21 @@ function recipeBadges(r,ingredientsById){
  return {badges:out,motivo:out.length?null:'ninguna',macros:m}}
 
 // Todas las etiquetas posibles, para armar el filtro.
-const ALL_BADGES=BADGES.map(b=>({k:b.k,n:b.n,emoji:b.emoji,d:b.d}))
+const ALL_BADGES=[
+ {k:'sinAzucar',n:'Sin azúcar',emoji:'🍭',d:'Sin azúcar añadida'},
+ {k:'bajoAzucar',n:'Bajo en azúcar',emoji:'🍬',d:'Poca azúcar añadida, o lleva fruta'}]
+ .concat(BADGES.map(b=>({k:b.k,n:b.n,emoji:b.emoji,d:b.d})))
  .concat([{k:'paleo',n:'Paleo',emoji:'🥥',d:'Sin harinas, lácteos ni azúcar añadida'}]);
 
 return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS,
         parseQty:parseQty, prettyQty:prettyQty, unitFamily:unitFamily, baseCost:baseCost,
-        displayCost:displayCost, COST_MIN:COST_MIN,
+        displayCost:displayCost, COST_MIN:COST_MIN, COST_READABLE:COST_READABLE,
         recipeCost:recipeCost, recipePrice:recipePrice, recipeUnitCost:recipeUnitCost,
         recipeMargin:recipeMargin, suggestPrice:suggestPrice,
         MACROS:MACROS, MACRO_KEYS:MACRO_KEYS, hasMacros:hasMacros,
         macroPerBase:macroPerBase, recipeMacros:recipeMacros,
         normalizarEtiqueta:normalizarEtiqueta,
         BADGES:BADGES, ALL_BADGES:ALL_BADGES,
-        recipeBadges:recipeBadges, esPaleo:esPaleo};
+        recipeBadges:recipeBadges, esPaleo:esPaleo,
+        esFruta:esFruta, FRUTAS:FRUTAS};
 });

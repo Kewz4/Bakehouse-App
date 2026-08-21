@@ -79,6 +79,8 @@ struct IngredientEditor: View {
     // Datos nutricionales: texto mientras se edita, para poder distinguir
     // "vacío" (no se sabe) de "0" (sí se sabe, y es cero).
     @State private var macros: [Macro: String] = [:]
+    /// Marcar fruta cambia qué etiqueta de azúcar sale en las recetas.
+    @State private var isFruit = false
     @State private var showMacros = false
     @State private var scanStatus = "Toma una foto de la tabla nutricional y se llena solo."
     @State private var scanning = false
@@ -140,6 +142,14 @@ struct IngredientEditor: View {
             }
         }
         .onAppear(perform: load)
+        .onChange(of: name) { _, newName in
+            // Sólo se adivina mientras crea uno nuevo; si está editando, lo que
+            // ella haya marcado se respeta.
+            guard ingredient == nil else { return }
+            var probe = Ingredient(name: newName, unit: "", quantity: 1, price: 0, unitSingle: "g")
+            probe.setFruit(nil)
+            isFruit = probe.isFruit
+        }
         .onChange(of: scanPick) { _, item in Task { await scanPicked(item) } }
         .sheet(isPresented: $showScanCamera) {
             CameraPicker { image in Task { await scan(image: image) } }
@@ -187,6 +197,26 @@ struct IngredientEditor: View {
                 Text("Por cada \(macroBasis)")
                     .font(Theme.rounded(12, .bold))
                     .foregroundStyle(Theme.ink)
+
+                // La casilla manda sobre lo que se adivina por el nombre: una
+                // ralladura de limón se puede desmarcar, y una "pulpa" que no
+                // suena a fruta se puede marcar.
+                Toggle(isOn: $isFruit) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Es una fruta")
+                            .font(Theme.rounded(14, .bold))
+                            .foregroundStyle(Theme.ink)
+                        Text("La fruta lleva azúcar natural (fructosa), así que las recetas con fruta salen como “bajo en azúcar” y no como “sin azúcar”.")
+                            .font(Theme.rounded(11))
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .tint(Theme.green)
+                .padding(12)
+                .background(Color(hex: 0xFDF7EF), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .stroke(Color(hex: 0xF0E2CD), lineWidth: 1))
 
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
                                     GridItem(.flexible(), spacing: 10)], spacing: 10) {
@@ -298,6 +328,7 @@ struct IngredientEditor: View {
                 if let v = i.macro(m) { macros[m] = Quantity.pretty(v) }
             }
             showMacros = i.hasMacros
+            isFruit = i.isFruit
         }
     }
 
@@ -315,6 +346,7 @@ struct IngredientEditor: View {
                 .replacingOccurrences(of: ",", with: ".")
             record.setMacro(m, raw.isEmpty ? nil : Double(raw))
         }
+        record.setFruit(isFruit)
         store.save(record)
         dismiss()
     }

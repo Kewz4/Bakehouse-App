@@ -35,9 +35,9 @@ public enum Badges {
 
     public static let all: [DietBadge] = [
         DietBadge(key: "sinAzucar",  name: "Sin azúcar",     emoji: "🍭",
-                  detail: "Menos de 0.5 g de azúcar por porción"),
+                  detail: "Sin azúcar añadida"),
         DietBadge(key: "bajoAzucar", name: "Bajo en azúcar", emoji: "🍬",
-                  detail: "5 g de azúcar o menos por porción"),
+                  detail: "Poca azúcar añadida, o lleva fruta"),
         DietBadge(key: "keto",       name: "Keto",           emoji: "🥑",
                   detail: "Pocos carbohidratos netos y mayoría de calorías de grasa"),
         DietBadge(key: "gymReady",   name: "GymReady",       emoji: "💪",
@@ -55,6 +55,20 @@ public enum Badges {
     private static func badge(_ key: String) -> DietBadge {
         all.first { $0.key == key }!
     }
+
+    /// La fruta lleva fructosa aunque no tenga azúcar añadida, así que una
+    /// receta con fruta nunca es "sin azúcar": es "baja en azúcar".
+    ///
+    /// El coco queda fuera a propósito: la harina y la leche de coco casi no
+    /// traen azúcar y marcarlas como fruta arruinaría las recetas keto.
+    public static let fruitWords = ["fresa", "frambuesa", "mora", "zarzamora", "arandano",
+        "arándano", "blueberry", "mango", "banano", "banana", "platano", "plátano",
+        "manzana", "pera", "piña", "pina", "durazno", "melocoton", "melocotón", "cereza",
+        "uva", "pasas", "naranja", "mandarina", "limon", "limón", "kiwi", "papaya",
+        "sandia", "sandía", "melon", "melón", "maracuya", "maracuyá", "guayaba", "datil",
+        "dátil", "higo", "ciruela", "granada", "tamarindo", "maranon", "marañón",
+        "jocote", "mamey", "zapote", "anona", "nispero", "níspero", "lichi",
+        "carambola", "fruta"]
 
     /// Paleo no se puede deducir de los macros: no es cuestión de cantidades
     /// sino de qué lleva la receta. Se mira por nombre, y a propósito de forma
@@ -93,8 +107,26 @@ public enum Badges {
         func v(_ m: Macro) -> Double { p[m] ?? 0 }
         let calories = v(.calorias)
 
-        if v(.azucar) <= 0.5 { out.badges.append(badge("sinAzucar")) }
-        else if v(.azucar) <= 5 { out.badges.append(badge("bajoAzucar")) }
+        // --- Azúcar ---------------------------------------------------------
+        // "Sin azúcar" en el mercado quiere decir SIN AZÚCAR AÑADIDA: la leche
+        // tiene lactosa y sigue vendiéndose como sin azúcar. Por eso se mira la
+        // añadida y no la total. La excepción es la fruta: su fructosa sí cuenta
+        // para quien la vigila, así que una receta con fruta no pasa de "baja".
+        //
+        // Si algún ingrediente no declara la azúcar añadida no se pone ninguna
+        // de las dos: es una afirmación sobre salud y no se hace a medias.
+        let used = recipe.lines.compactMap { $0.ingredientId.flatMap { ingredients[$0] } }
+        let knowAdded = used.count == recipe.lines.count
+            && used.allSatisfy { $0.macro(.azucarAnadida) != nil }
+        if knowAdded {
+            let added = v(.azucarAnadida)
+            let withFruit = used.contains { $0.isFruit }
+            if added <= 0.5 && !withFruit {
+                out.badges.append(badge("sinAzucar"))
+            } else if added <= 5 {
+                out.badges.append(badge("bajoAzucar"))
+            }
+        }
 
         let netCarbs = v(.carbohidratos) - v(.fibra)
         if calories > 0, netCarbs <= 10, (v(.grasa) * 9) / calories >= 0.6 {
@@ -107,7 +139,6 @@ public enum Badges {
         if v(.grasa) <= 3 { out.badges.append(badge("bajoGrasa")) }
         if v(.sodioMg) <= 140 { out.badges.append(badge("bajoSodio")) }
 
-        let used = recipe.lines.compactMap { $0.ingredientId.flatMap { ingredients[$0] } }
         if used.count == recipe.lines.count, isPaleo(used) {
             out.badges.append(badge("paleo"))
         }

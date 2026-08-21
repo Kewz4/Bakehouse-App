@@ -282,6 +282,8 @@ function macroFields(g){const m=(g&&g.macros)||{};
    <p class="helper" id="scanHint">Toma una foto de la tabla nutricional y se llena solo.</p>`:''}
   <p class="helper"><b>Por cada <span id="macBase">${macroBase(g&&g.unitSingle)}</span></b></p>
   <div class="form-grid">${filas}</div>
+  <label class="fruta-check"><input id="ingFruta" type="checkbox" ${esFruta(g)?'checked':''}>
+   <span><b>Es una fruta</b><small>La fruta lleva azúcar natural (fructosa), así que las recetas con fruta salen como “bajo en azúcar” y no como “sin azúcar”.</small></span></label>
  </details>`}
 
 // Lee la etiqueta de una foto y llena los campos. Ella no elige nada: o sale, o
@@ -306,6 +308,11 @@ async function scanLabel(e){const file=e.target.files&&e.target.files[0];e.targe
 
 // Recoge los macros del formulario. Vacío = null (no se sabe), que no es lo
 // mismo que 0.
+// La casilla manda sobre lo que se adivina por el nombre: así una ralladura de
+// limón se puede desmarcar y una "pulpa" sin nombre obvio se puede marcar.
+function readFruta(){const el=document.getElementById('ingFruta');
+ return el?el.checked:undefined}
+
 function readMacros(){const m={};let alguno=false;
  MACRO_KEYS.forEach(k=>{const el=document.getElementById('mac_'+k);
   const v=el&&el.value.trim();
@@ -316,8 +323,8 @@ function openIngredient(id){const g=data.ingredients.find(x=>x.id===id)||{name:'
 openModal(id?'Editar ingrediente':'Nuevo ingrediente',`<div class="form-grid">${field('Nombre','ingName','text',esc(g.name))}${field('¿Cómo lo compras?','ingUnit','text',esc(g.unit),'placeholder="ej. bolsa, caja, botella"')}${field('¿Cuánto trae?','ingQty','text',g.quantity!=null&&g.quantity!==''?prettyQty(g.quantity):'','readonly data-pad="1" placeholder="toca para escribir" onfocus="openPad(this)" onclick="openPad(this)"')}<div class="field"><label>¿En qué se mide?</label><select id="ingUnitSingle" onchange="const b=$('#macBase');if(b)b.textContent=macroBase(this.value)">${unitOptions(g.unitSingle||'g')}</select></div>${field('¿Cuánto te costó? ($)','ingPrice','number',g.price,'min="0" step="0.01" inputmode="decimal"')}</div><p class="helper">Ejemplo: compras una bolsa de harina de 5 libras por $6.50 → escribes “bolsa”, 5 y eliges “libras”. Después en tus recetas puedes usar gramos: la cuenta se hace sola.</p>${macroFields(g)}<div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="addIngredient('${id||''}')">Guardar ingrediente</button></div>`)}
 function addIngredient(id){const name=$('#ingName').value.trim(),unit=$('#ingUnit').value.trim(),quantity=parseQty($('#ingQty').value),price=+$('#ingPrice').value,unitSingle=$('#ingUnitSingle').value||'g';
 if(!name||!unit||!quantity||!(price>=0))return toast('Completa todos los campos.',true);
-const macros=readMacros();
-const rec=sello({id:id||crypto.randomUUID(),name,unit,quantity,price,unitSingle,macros});
+const macros=readMacros(),fruta=readFruta();
+const rec=sello({id:id||crypto.randomUUID(),name,unit,quantity,price,unitSingle,macros,fruta});
 if(id)data.ingredients=data.ingredients.map(x=>x.id===id?rec:x);else data.ingredients.push(rec);
 save(id?'Ingrediente actualizado':'Ingrediente guardado');closeModal()}
 function ingredientLines(lines=[]){return `<div class="ingredients" id="ingredientsForm">${(lines.length?lines:[{}]).map(x=>ingredientLine(x)).join('')}</div><button class="btn alt" type="button" onclick="addLine()">+ Agregar ingrediente</button>`}

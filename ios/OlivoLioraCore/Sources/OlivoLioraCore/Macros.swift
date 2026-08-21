@@ -3,7 +3,8 @@ import Foundation
 /// Los datos nutricionales que se pueden guardar de un ingrediente.
 /// Mismo conjunto y mismos nombres que en business-core.js.
 public enum Macro: String, CaseIterable, Sendable, Identifiable {
-    case calorias, proteina, carbohidratos, azucar, grasa, grasaSaturada, fibra, sodioMg
+    case calorias, proteina, carbohidratos, azucar, azucarAnadida,
+         grasa, grasaSaturada, fibra, sodioMg
 
     public var id: String { rawValue }
 
@@ -13,6 +14,7 @@ public enum Macro: String, CaseIterable, Sendable, Identifiable {
         case .proteina:      return "Proteína"
         case .carbohidratos: return "Carbohidratos"
         case .azucar:        return "Azúcares"
+        case .azucarAnadida: return "Azúcares añadidos"
         case .grasa:         return "Grasa"
         case .grasaSaturada: return "Grasa saturada"
         case .fibra:         return "Fibra"
@@ -47,6 +49,20 @@ public extension Ingredient {
 
     /// Cuánto aporta 1 unidad base (1 g, 1 ml, 1 unidad).
     func macroPerBase(_ m: Macro) -> Double { (macro(m) ?? 0) / 100 }
+
+    /// ¿Es fruta? Lo que ella marcó manda; si no marcó nada, se mira el nombre.
+    ///
+    /// Importa porque la fruta lleva fructosa aunque no tenga azúcar añadida, y
+    /// entonces la receta es "baja en azúcar", nunca "sin azúcar".
+    var isFruit: Bool {
+        if let flag = record["fruta"]?.boolValue { return flag }
+        let name = self.name.lowercased()
+        return Badges.fruitWords.contains { name.contains($0) }
+    }
+
+    mutating func setFruit(_ value: Bool?) {
+        record["fruta"] = value.map { JSONValue.bool($0) }
+    }
 }
 
 /// Resultado de sumar los macros de una receta.

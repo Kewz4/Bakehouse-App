@@ -281,8 +281,8 @@
         "price": 3,
         "unitSingle": "kg"
       },
-      "amount": 0.680388,
-      "unit": "lb"
+      "amount": 1.5,
+      "unit": "kg"
     },
     {
       "in": {
@@ -301,8 +301,8 @@
         "price": 1.15,
         "unitSingle": "l"
       },
-      "amount": 0.276,
-      "unit": "taza"
+      "amount": 1.15,
+      "unit": "L"
     },
     {
       "in": {
@@ -311,8 +311,8 @@
         "price": 4.2,
         "unitSingle": "ml"
       },
-      "amount": 0.35000000000000003,
-      "unit": "cdta"
+      "amount": 0.07,
+      "unit": "ml"
     },
     {
       "in": {
@@ -336,6 +336,7 @@
         "proteina": 21,
         "carbohidratos": 22,
         "azucar": 4,
+        "azucarAnadida": 0,
         "grasa": 50,
         "grasaSaturada": 4,
         "fibra": 12,
@@ -352,6 +353,7 @@
         "proteina": 6,
         "carbohidratos": 0.6,
         "azucar": 0.6,
+        "azucarAnadida": 0,
         "grasa": 5,
         "grasaSaturada": 1.6,
         "fibra": 0,
@@ -368,6 +370,7 @@
         "proteina": 10,
         "carbohidratos": 76,
         "azucar": 0.3,
+        "azucarAnadida": 0,
         "grasa": 1,
         "grasaSaturada": 0.2,
         "fibra": 3,
@@ -384,6 +387,7 @@
         "proteina": 0,
         "carbohidratos": 100,
         "azucar": 100,
+        "azucarAnadida": 100,
         "grasa": 0,
         "grasaSaturada": 0,
         "fibra": 0,
@@ -400,6 +404,7 @@
         "proteina": 80,
         "carbohidratos": 8,
         "azucar": 3,
+        "azucarAnadida": 0,
         "grasa": 6,
         "grasaSaturada": 2,
         "fibra": 1,
@@ -416,10 +421,46 @@
         "proteina": 0.7,
         "carbohidratos": 7.7,
         "azucar": 4.9,
+        "azucarAnadida": 0,
         "grasa": 0.3,
         "grasaSaturada": 0,
         "fibra": 2,
         "sodioMg": 1
+      }
+    },
+    "leche": {
+      "id": "leche",
+      "name": "Leche entera",
+      "quantity": 1,
+      "unitSingle": "l",
+      "macros": {
+        "calorias": 61,
+        "proteina": 3.2,
+        "carbohidratos": 4.8,
+        "azucar": 4.8,
+        "azucarAnadida": 0,
+        "grasa": 3.3,
+        "grasaSaturada": 1.9,
+        "fibra": 0,
+        "sodioMg": 43
+      }
+    },
+    "ralladura": {
+      "id": "ralladura",
+      "name": "Ralladura de limón",
+      "quantity": 100,
+      "unitSingle": "g",
+      "fruta": false,
+      "macros": {
+        "calorias": 47,
+        "proteina": 1.5,
+        "carbohidratos": 16,
+        "azucar": 4.2,
+        "azucarAnadida": 0,
+        "grasa": 0.3,
+        "grasaSaturada": 0,
+        "fibra": 10,
+        "sodioMg": 6
       }
     },
     "sinDatos": {
@@ -448,7 +489,7 @@
         ]
       },
       "badges": [
-        "bajoAzucar",
+        "sinAzucar",
         "keto",
         "bajoSodio",
         "paleo"
@@ -491,7 +532,7 @@
         ]
       },
       "badges": [
-        "bajoAzucar",
+        "sinAzucar",
         "gymReady",
         "bajoGrasa",
         "bajoSodio"
@@ -500,7 +541,26 @@
     },
     {
       "in": {
-        "name": "con fruta baja en azucar",
+        "name": "lacteo sin anadida",
+        "yield": 8,
+        "ingredients": [
+          {
+            "ingredientId": "leche",
+            "qty": 500,
+            "unit": "ml"
+          }
+        ]
+      },
+      "badges": [
+        "sinAzucar",
+        "bajoGrasa",
+        "bajoSodio"
+      ],
+      "motivo": null
+    },
+    {
+      "in": {
+        "name": "con fruta",
         "yield": 8,
         "ingredients": [
           {
@@ -517,6 +577,55 @@
       },
       "badges": [
         "bajoAzucar",
+        "keto",
+        "bajoSodio",
+        "paleo"
+      ],
+      "motivo": null
+    },
+    {
+      "in": {
+        "name": "poca anadida",
+        "yield": 8,
+        "ingredients": [
+          {
+            "ingredientId": "almendra",
+            "qty": 200,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "blanca",
+            "qty": 10,
+            "unit": "g"
+          }
+        ]
+      },
+      "badges": [
+        "bajoAzucar",
+        "keto",
+        "bajoSodio"
+      ],
+      "motivo": null
+    },
+    {
+      "in": {
+        "name": "ralladura no cuenta como fruta",
+        "yield": 8,
+        "ingredients": [
+          {
+            "ingredientId": "almendra",
+            "qty": 200,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "ralladura",
+            "qty": 5,
+            "unit": "g"
+          }
+        ]
+      },
+      "badges": [
+        "sinAzucar",
         "keto",
         "bajoSodio",
         "paleo"
@@ -632,6 +741,7 @@
         "proteina": 55,
         "carbohidratos": 560,
         "azucar": 207.5,
+        "azucarAnadida": 0,
         "grasa": 6,
         "grasaSaturada": 1,
         "fibra": 13.500000000000002,
@@ -642,6 +752,7 @@
         "proteina": 5.5,
         "carbohidratos": 56,
         "azucar": 20.75,
+        "azucarAnadida": 0,
         "grasa": 0.6,
         "grasaSaturada": 0.1,
         "fibra": 1.35,
@@ -678,6 +789,7 @@
         "proteina": 27.5,
         "carbohidratos": 180,
         "azucar": 3.75,
+        "azucarAnadida": 0,
         "grasa": 3,
         "grasaSaturada": 0.5,
         "fibra": 6.750000000000001,
@@ -688,6 +800,7 @@
         "proteina": 3.4375,
         "carbohidratos": 22.5,
         "azucar": 0.46875,
+        "azucarAnadida": 0,
         "grasa": 0.375,
         "grasaSaturada": 0.0625,
         "fibra": 0.8437500000000001,
@@ -714,6 +827,7 @@
         "proteina": 15.36,
         "carbohidratos": 23.04,
         "azucar": 23.04,
+        "azucarAnadida": 0,
         "grasa": 15.84,
         "grasaSaturada": 9.12,
         "fibra": 0,
@@ -724,6 +838,7 @@
         "proteina": 3.84,
         "carbohidratos": 5.76,
         "azucar": 5.76,
+        "azucarAnadida": 0,
         "grasa": 3.96,
         "grasaSaturada": 2.28,
         "fibra": 0,
@@ -744,6 +859,7 @@
         "proteina": 0,
         "carbohidratos": 0,
         "azucar": 0,
+        "azucarAnadida": 0,
         "grasa": 0,
         "grasaSaturada": 0,
         "fibra": 0,
@@ -754,6 +870,7 @@
         "proteina": 0,
         "carbohidratos": 0,
         "azucar": 0,
+        "azucarAnadida": 0,
         "grasa": 0,
         "grasaSaturada": 0,
         "fibra": 0,

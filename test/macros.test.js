@@ -184,18 +184,82 @@ test('una receta sin ingredientes no lleva etiquetas', () => {
   assert.equal(out.motivo, 'sin-ingredientes');
 });
 
-test('sin azúcar sólo por debajo de medio gramo por porción', () => {
-  const cero = { id: 'z', name: 'Almendra', quantity: 1, unitSingle: 'kg',
-    macros: { calorias: 100, proteina: 5, carbohidratos: 2, azucar: 0,
-              grasa: 8, grasaSaturada: 1, fibra: 1, sodioMg: 5 } };
-  const r = { yield: 10, ingredients: [{ ingredientId: 'z', qty: 100, unit: 'g' }] };
-  assert.ok(names(B.recipeBadges(r, { z: cero })).includes('sinAzucar'));
+// --- Azúcar: lo que cuenta es la AÑADIDA ------------------------------------
 
-  // Con algo de azúcar pasa a "bajo", no a "sin".
-  const poco = Object.assign({}, cero, { macros: Object.assign({}, cero.macros, { azucar: 20 }) });
-  const b = names(B.recipeBadges(r, { z: poco }));
-  assert.ok(!b.includes('sinAzucar'));
-  assert.ok(b.includes('bajoAzucar'));
+const conAnadida = (name, azucar, azucarAnadida, extra) => Object.assign({
+  id: name, name, quantity: 1, unitSingle: 'kg',
+  macros: { calorias: 100, proteina: 1, carbohidratos: 20, azucar, azucarAnadida,
+            grasa: 1, grasaSaturada: 0, fibra: 1, sodioMg: 10 }
+}, extra || {});
+
+test('azúcar NATURAL sin añadida sigue siendo "sin azúcar"', () => {
+  // La leche tiene lactosa y se vende como sin azúcar. Lo que la gente busca
+  // al leer "sugar free" es que no le hayan AÑADIDO azúcar.
+  const leche = conAnadida('Leche', 4.8, 0);
+  const r = { yield: 8, ingredients: [{ ingredientId: 'Leche', qty: 500, unit: 'g' }] };
+  const b = names(B.recipeBadges(r, { Leche: leche }));
+  assert.ok(b.includes('sinAzucar'), 'esperaba sinAzucar: ' + b.join(','));
+  assert.ok(!b.includes('bajoAzucar'));
+});
+
+test('la fruta baja la etiqueta a "bajo en azúcar" aunque no lleve añadida', () => {
+  const fresa = conAnadida('Fresas', 4.9, 0);
+  const r = { yield: 8, ingredients: [{ ingredientId: 'Fresas', qty: 200, unit: 'g' }] };
+  const b = names(B.recipeBadges(r, { Fresas: fresa }));
+  assert.ok(b.includes('bajoAzucar'), 'esperaba bajoAzucar: ' + b.join(','));
+  assert.ok(!b.includes('sinAzucar'), 'la fructosa impide decir "sin azúcar"');
+});
+
+test('poca azúcar añadida es "bajo en azúcar"', () => {
+  const base = conAnadida('Base', 1, 0);
+  const azuc = conAnadida('Azúcar blanca', 100, 100);
+  const r = { yield: 8, ingredients: [
+    { ingredientId: 'Base', qty: 200, unit: 'g' },
+    { ingredientId: 'Azúcar blanca', qty: 10, unit: 'g' }] };
+  const b = names(B.recipeBadges(r, { 'Base': base, 'Azúcar blanca': azuc }));
+  assert.ok(b.includes('bajoAzucar'), b.join(','));
+});
+
+test('mucha azúcar añadida no lleva ninguna etiqueta de azúcar', () => {
+  const base = conAnadida('Base', 1, 0);
+  const azuc = conAnadida('Azúcar blanca', 100, 100);
+  const r = { yield: 8, ingredients: [
+    { ingredientId: 'Base', qty: 200, unit: 'g' },
+    { ingredientId: 'Azúcar blanca', qty: 200, unit: 'g' }] };
+  const b = names(B.recipeBadges(r, { 'Base': base, 'Azúcar blanca': azuc }));
+  assert.ok(!b.includes('sinAzucar') && !b.includes('bajoAzucar'), b.join(','));
+});
+
+test('sin el dato de azúcar añadida NO se pone ninguna de las dos', () => {
+  // Es una afirmación sobre salud: sin el dato no se afirma nada.
+  const sinDato = { id: 'x', name: 'Algo', quantity: 1, unitSingle: 'kg',
+    macros: { calorias: 100, proteina: 1, carbohidratos: 20, azucar: 0,
+              grasa: 1, grasaSaturada: 0, fibra: 1, sodioMg: 10 } };
+  const r = { yield: 8, ingredients: [{ ingredientId: 'x', qty: 100, unit: 'g' }] };
+  const b = names(B.recipeBadges(r, { x: sinDato }));
+  assert.ok(!b.includes('sinAzucar') && !b.includes('bajoAzucar'), b.join(','));
+});
+
+test('la marca manual de fruta gana sobre el nombre', () => {
+  // "Ralladura de limón" suena a fruta pero casi no aporta azúcar.
+  const ralladura = conAnadida('Ralladura de limón', 4.2, 0, { fruta: false });
+  assert.equal(B.esFruta(ralladura), false);
+  const r = { yield: 8, ingredients: [{ ingredientId: 'Ralladura de limón', qty: 5, unit: 'g' }] };
+  assert.ok(names(B.recipeBadges(r, { 'Ralladura de limón': ralladura })).includes('sinAzucar'));
+
+  // Y al revés: algo que no suena a fruta se puede marcar como tal.
+  const pulpa = conAnadida('Pulpa natural', 8, 0, { fruta: true });
+  assert.equal(B.esFruta(pulpa), true);
+  const r2 = { yield: 8, ingredients: [{ ingredientId: 'Pulpa natural', qty: 100, unit: 'g' }] };
+  assert.ok(names(B.recipeBadges(r2, { 'Pulpa natural': pulpa })).includes('bajoAzucar'));
+});
+
+test('detecta fruta por el nombre cuando no se marcó nada', () => {
+  assert.equal(B.esFruta({ name: 'Fresas congeladas' }), true);
+  assert.equal(B.esFruta({ name: 'Mango en trozos' }), true);
+  assert.equal(B.esFruta({ name: 'Harina de trigo' }), false);
+  // El coco queda fuera a propósito: casi no trae azúcar.
+  assert.equal(B.esFruta({ name: 'Harina de coco' }), false);
 });
 
 test('keto exige pocos carbohidratos netos Y mayoría de calorías de grasa', () => {

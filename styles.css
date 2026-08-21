@@ -208,3 +208,10 @@ body.pad-open .tabbar{opacity:0;pointer-events:none}
     .price-result span{font-size:12px;opacity:.78}
     .price-result strong{display:block;font-size:28px;margin-top:3px;letter-spacing:-1px}
     .price-result small{display:block;margin-top:6px;font-size:12px;font-weight:700;opacity:.92}
+
+    /* Marcar un ingrediente como fruta: cambia qué etiqueta de azúcar sale. */
+    .fruta-check{display:flex;gap:10px;align-items:flex-start;margin-top:12px;padding:12px;
+      background:#fdf7ef;border:1px solid #f0e2cd;border-radius:11px;cursor:pointer}
+    .fruta-check input{width:20px;height:20px;accent-color:var(--green);margin-top:1px;flex:none}
+    .fruta-check b{display:block;font-size:14px;color:var(--ink)}
+    .fruta-check small{display:block;font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}

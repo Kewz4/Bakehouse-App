@@ -80,23 +80,33 @@ const macroRecipes = [
 // que es lo que de verdad importa (una receta incompleta no lleva ninguna).
 const badgeIngredients = {
   almendra: { id: 'almendra', name: 'Harina de almendra', quantity: 1, unitSingle: 'kg',
-    macros: { calorias: 579, proteina: 21, carbohidratos: 22, azucar: 4,
+    macros: { calorias: 579, proteina: 21, carbohidratos: 22, azucar: 4, azucarAnadida: 0,
               grasa: 50, grasaSaturada: 4, fibra: 12, sodioMg: 1 } },
   huevo: { id: 'huevo', name: 'Huevos', quantity: 12, unitSingle: 'u',
-    macros: { calorias: 78, proteina: 6, carbohidratos: 0.6, azucar: 0.6,
+    macros: { calorias: 78, proteina: 6, carbohidratos: 0.6, azucar: 0.6, azucarAnadida: 0,
               grasa: 5, grasaSaturada: 1.6, fibra: 0, sodioMg: 62 } },
   trigo: { id: 'trigo', name: 'Harina de trigo', quantity: 1, unitSingle: 'kg',
-    macros: { calorias: 364, proteina: 10, carbohidratos: 76, azucar: 0.3,
+    macros: { calorias: 364, proteina: 10, carbohidratos: 76, azucar: 0.3, azucarAnadida: 0,
               grasa: 1, grasaSaturada: 0.2, fibra: 3, sodioMg: 2 } },
   blanca: { id: 'blanca', name: 'Azúcar blanca', quantity: 1, unitSingle: 'kg',
-    macros: { calorias: 400, proteina: 0, carbohidratos: 100, azucar: 100,
+    macros: { calorias: 400, proteina: 0, carbohidratos: 100, azucar: 100, azucarAnadida: 100,
               grasa: 0, grasaSaturada: 0, fibra: 0, sodioMg: 0 } },
   suero: { id: 'suero', name: 'Proteína de suero', quantity: 1, unitSingle: 'kg',
-    macros: { calorias: 400, proteina: 80, carbohidratos: 8, azucar: 3,
+    macros: { calorias: 400, proteina: 80, carbohidratos: 8, azucar: 3, azucarAnadida: 0,
               grasa: 6, grasaSaturada: 2, fibra: 1, sodioMg: 300 } },
+  // Fruta: fructosa natural, cero azúcar añadida.
   fresa: { id: 'fresa', name: 'Fresas', quantity: 1, unitSingle: 'kg',
-    macros: { calorias: 32, proteina: 0.7, carbohidratos: 7.7, azucar: 4.9,
+    macros: { calorias: 32, proteina: 0.7, carbohidratos: 7.7, azucar: 4.9, azucarAnadida: 0,
               grasa: 0.3, grasaSaturada: 0, fibra: 2, sodioMg: 1 } },
+  // Lactosa natural, cero añadida: tiene que salir "sin azúcar".
+  leche: { id: 'leche', name: 'Leche entera', quantity: 1, unitSingle: 'l',
+    macros: { calorias: 61, proteina: 3.2, carbohidratos: 4.8, azucar: 4.8, azucarAnadida: 0,
+              grasa: 3.3, grasaSaturada: 1.9, fibra: 0, sodioMg: 43 } },
+  // Marcada a mano como NO fruta pese a llamarse limón: es sólo ralladura.
+  ralladura: { id: 'ralladura', name: 'Ralladura de limón', quantity: 100, unitSingle: 'g',
+    fruta: false,
+    macros: { calorias: 47, proteina: 1.5, carbohidratos: 16, azucar: 4.2, azucarAnadida: 0,
+              grasa: 0.3, grasaSaturada: 0, fibra: 10, sodioMg: 6 } },
   sinDatos: { id: 'sinDatos', name: 'Vainilla', quantity: 1, unitSingle: 'ml' }
 };
 
@@ -109,9 +119,22 @@ const badgeRecipes = [
                   { ingredientId: 'blanca', qty: 200, unit: 'g' }] },
   { name: 'alto en proteina', yield: 4,
     ingredients: [{ ingredientId: 'suero', qty: 100, unit: 'g' }] },
-  { name: 'con fruta baja en azucar', yield: 8,
+  // Lactosa pero sin azúcar añadida -> SIN azúcar
+  { name: 'lacteo sin anadida', yield: 8,
+    ingredients: [{ ingredientId: 'leche', qty: 500, unit: 'ml' }] },
+  // Fruta sin azúcar añadida -> BAJO en azúcar (fructosa)
+  { name: 'con fruta', yield: 8,
     ingredients: [{ ingredientId: 'almendra', qty: 150, unit: 'g' },
                   { ingredientId: 'fresa', qty: 200, unit: 'g' }] },
+  // Poca azúcar añadida -> BAJO en azúcar
+  { name: 'poca anadida', yield: 8,
+    ingredients: [{ ingredientId: 'almendra', qty: 200, unit: 'g' },
+                  { ingredientId: 'blanca', qty: 10, unit: 'g' }] },
+  // "Limón" desmarcado como fruta -> sigue siendo SIN azúcar
+  { name: 'ralladura no cuenta como fruta', yield: 8,
+    ingredients: [{ ingredientId: 'almendra', qty: 200, unit: 'g' },
+                  { ingredientId: 'ralladura', qty: 5, unit: 'g' }] },
+  // Falta la azúcar añadida de un ingrediente -> ninguna etiqueta de azúcar
   { name: 'faltan datos', yield: 4,
     ingredients: [{ ingredientId: 'almendra', qty: 100, unit: 'g' },
                   { ingredientId: 'sinDatos', qty: 5, unit: 'ml' }] },

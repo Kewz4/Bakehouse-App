@@ -462,3 +462,41 @@ test('"Te sale a" usa una unidad que se pueda leer, no $0.00 por gramo', async (
       'debería salir alrededor de $1.24 por lb: ' + celda);
   } finally { await d.close(); }
 });
+
+test('la fruta cambia "sin azúcar" por "bajo en azúcar"', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => {
+      const base = { calorias: 100, proteina: 1, carbohidratos: 20, azucar: 1,
+                     azucarAnadida: 0, grasa: 1, grasaSaturada: 0, fibra: 1, sodioMg: 5 };
+      data.ingredients.push(sello({ id: 'alm', name: 'Harina de almendra', unit: 'bolsa',
+        quantity: 1, price: 8, unitSingle: 'kg', macros: base }));
+      data.ingredients.push(sello({ id: 'fre', name: 'Fresas', unit: 'caja',
+        quantity: 1, price: 3, unitSingle: 'kg',
+        macros: Object.assign({}, base, { azucar: 4.9 }) }));
+      // Sin fruta -> sin azúcar
+      data.recipes.push(sello({ id: 'r1', name: 'Galleta simple', yield: 8, price: 2,
+        ingredients: [{ ingredientId: 'alm', qty: 200, unit: 'g', cost: 0 }] }));
+      // Con fruta -> bajo en azúcar
+      data.recipes.push(sello({ id: 'r2', name: 'Tarta de fresa', yield: 8, price: 3,
+        ingredients: [{ ingredientId: 'alm', qty: 150, unit: 'g', cost: 0 },
+                      { ingredientId: 'fre', qty: 200, unit: 'g', cost: 0 }] }));
+      save(); go('recipes');
+    });
+    await d.page.waitForSelector('.dbadge', { timeout: 10000 });
+
+    const porReceta = await d.page.evaluate(() =>
+      Object.fromEntries([...document.querySelectorAll('.recipe')].map(c => [
+        c.querySelector('h3').textContent,
+        [...c.querySelectorAll('.dbadge')].map(b => b.textContent.trim())
+      ])));
+
+    assert.ok(porReceta['Galleta simple'].some(t => /Sin azúcar/.test(t)),
+      'sin fruta y sin azúcar añadida -> Sin azúcar: ' + porReceta['Galleta simple']);
+    assert.ok(porReceta['Tarta de fresa'].some(t => /Bajo en azúcar/.test(t)),
+      'con fruta -> Bajo en azúcar: ' + porReceta['Tarta de fresa']);
+    assert.ok(!porReceta['Tarta de fresa'].some(t => /Sin azúcar/.test(t)),
+      'la fructosa impide decir "sin azúcar"');
+    assert.deepEqual(d.errors, []);
+  } finally { await d.close(); }
+});

@@ -63,22 +63,28 @@ public struct Ingredient: RecordBacked, Hashable, Sendable {
 
     /// A cuánto sale, en una unidad que se pueda leer.
     ///
-    /// Decir "$0.00 por g" es inútil: una harina de $1.25 la bolsa de 459 g sale
-    /// a $0.0027 el gramo, y a dos decimales eso es cero. No era un cálculo
-    /// malo, era una unidad mal elegida.
-    ///
-    /// Se elige la unidad más pequeña de la misma familia con la que el número
-    /// pase de 10 centavos: esa harina sale "$1.24 por lb" y los huevos siguen
-    /// saliendo "$0.20 por u". Réplica de displayCost() en business-core.js.
+    /// Manda la unidad que ELLA eligió: si compra la harina en kilos, la quiere
+    /// ver en kilos, no en onzas. Sólo se cambia cuando su unidad daría "$0.00"
+    /// —una harina de $1.25 la bolsa de 459 g sale a $0.0027 el gramo, y a dos
+    /// decimales eso es cero—; ahí se sube a la unidad más pequeña que pase de
+    /// 10 centavos. Réplica de displayCost() en business-core.js.
     public var displayCost: (amount: Double, unit: String) {
         let perBase = baseCost
+        let own = Units.info(unitSingle)
+        // Su unidad, si se lee bien.
+        if perBase * own.factor >= Ingredient.costReadable {
+            return (perBase * own.factor, own.short)
+        }
         let options = Units.inFamily(Units.family(unitSingle)).sorted { $0.factor < $1.factor }
-        guard !options.isEmpty else { return (perBase, Units.info(unitSingle).short) }
-        let chosen = options.first { perBase * $0.factor >= Ingredient.costMinimum } ?? options[options.count - 1]
+        guard !options.isEmpty else { return (perBase * own.factor, own.short) }
+        let chosen = options.first { perBase * $0.factor >= Ingredient.costMinimum }
+            ?? options[options.count - 1]
         return (perBase * chosen.factor, chosen.short)
     }
 
-    /// Por debajo de esto el número se ve como cero y hay que subir de unidad.
+    /// Por debajo de esto el número se ve como "$0.00".
+    public static let costReadable: Double = 0.01
+    /// Al subir de unidad, se busca al menos esto.
     public static let costMinimum: Double = 0.10
 
     @available(*, deprecated, message: "Usa displayCost: daba $0.00 para ingredientes que se miden en gramos")
