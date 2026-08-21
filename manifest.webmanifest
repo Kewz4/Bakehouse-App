@@ -1,0 +1,27 @@
+{
+  "id": "/",
+  "name": "Olivo & Liora · Control de negocio",
+  "short_name": "Olivo & Liora",
+  "description": "Costos, recetas, ventas y ganancias de Olivo & Liora.",
+  "lang": "es",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "orientation": "portrait",
+  "background_color": "#fbf9f3",
+  "theme_color": "#365b4c",
+  "categories": ["business", "food", "productivity"],
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ],
+  "shortcuts": [
+    { "name": "Registrar venta", "short_name": "Venta", "url": "./#sales", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Nueva receta", "short_name": "Receta", "url": "./#recipes", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] },
+    { "name": "Registrar gasto", "short_name": "Gasto", "url": "./#expenses", "icons": [{ "src": "icon-192.png", "sizes": "192x192" }] }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "name": "olivo-liora",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PWA de control de negocio para la repostería Olivo & Liora.",
+  "dependencies": {
+    "@vercel/blob": "^0.27.0"
+  }
+}
