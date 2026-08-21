@@ -36,32 +36,69 @@ function blobToken() {
   return key ? process.env[key] : null;
 }
 
-const PATHNAME = 'datos/olivo-liora.json';
+// Cada escritura crea un objeto NUEVO bajo este prefijo; ninguno se sobrescribe
+// jamás. Leer es juntar todos y combinarlos.
+//
+// ---------------------------------------------------------------------------
+// POR QUÉ NO UN SOLO ARCHIVO QUE SE PISA
+// ---------------------------------------------------------------------------
+// Se probó y falla en producción. Un blob público se sirve desde el CDN, y al
+// sobrescribirlo la URL no cambia: una lectura puede devolver una copia vieja
+// (se midieron 33 segundos de retraso). Con leer-combinar-guardar sobre un
+// archivo único, eso significa combinar contra datos viejos y **perder** lo que
+// otro dispositivo acababa de escribir. Ni el cache-buster `?t=` ni
+// `cacheControlMaxAge: 0` lo evitan, y la re-lectura de verificación pasa por el
+// mismo camino, así que tampoco lo detecta.
+//
+// Escribiendo objetos nuevos el problema desaparece: cada URL es inmutable, así
+// que el CDN puede cachearla todo lo que quiera. Y si el listado va atrasado y
+// no vemos el objeto de otro dispositivo, no se pierde nada — sigue ahí y entra
+// en la próxima lectura. Esto se apoya en que combinar es conmutativo,
+// asociativo e idempotente (ver sync-core.js): juntar los mismos trozos en
+// cualquier orden, y más de una vez, da el mismo resultado.
+const PREFIX = 'datos/olivo-liora';
 const MAX_BYTES = 4 * 1024 * 1024;
 
-// Cuántas veces reintentamos leer-combinar-guardar si dos dispositivos
-// escriben en el mismo instante.
-const WRITE_ATTEMPTS = 3;
+// Si se juntan muchos trozos, se leen los más recientes. Sólo se borran los que
+// de verdad se combinaron, así que nunca se descarta algo sin haberlo guardado.
+const MAX_PARTS = 24;
 
-async function readDoc() {
+async function listParts() {
   const { list } = await import('@vercel/blob');
-  const { blobs } = await list({ prefix: PATHNAME, limit: 1, token: blobToken() });
-  if (!blobs.length) return Sync.emptyDoc();
-
-  const r = await fetch(blobs[0].url + '?t=' + Date.now(), { cache: 'no-store' });
-  if (!r.ok) return Sync.emptyDoc();
-
-  try {
-    return Sync.normalizeDoc(await r.json());
-  } catch (e) {
-    // Un blob corrupto no debe tumbar la app: arrancamos de cero en memoria
-    // pero no lo sobrescribimos hasta que llegue una escritura real.
-    console.error('blob ilegible', e);
-    return Sync.emptyDoc();
-  }
+  const { blobs } = await list({ prefix: PREFIX, token: blobToken(), limit: 100 });
+  // Más nuevos primero.
+  return blobs.slice().sort((a, b) =>
+    new Date(b.uploadedAt || 0) - new Date(a.uploadedAt || 0));
 }
 
-async function writeDoc(doc) {
+/** Lee todos los trozos y los combina en un solo documento. */
+async function readDoc() {
+  const parts = (await listParts()).slice(0, MAX_PARTS);
+  if (!parts.length) return { doc: Sync.emptyDoc(), merged: [] };
+
+  const bodies = await Promise.all(parts.map(async (b) => {
+    try {
+      // La URL es inmutable, así que da igual que venga del CDN.
+      const r = await fetch(b.url);
+      if (!r.ok) return null;
+      return await r.json();
+    } catch (e) {
+      return null;
+    }
+  }));
+
+  let doc = Sync.emptyDoc();
+  const merged = [];
+  bodies.forEach((body, i) => {
+    if (!body) return;
+    doc = Sync.mergeDocs(doc, body);
+    merged.push(parts[i].url);
+  });
+  return { doc, merged };
+}
+
+/** Escribe un trozo nuevo. Nunca pisa nada. */
+async function writePart(doc) {
   const payload = JSON.stringify(doc);
   if (Buffer.byteLength(payload) > MAX_BYTES) {
     const err = new Error('demasiado grande');
@@ -69,15 +106,35 @@ async function writeDoc(doc) {
     throw err;
   }
   const { put } = await import('@vercel/blob');
-  await put(PATHNAME, payload, {
+  await put(PREFIX + '.json', payload, {
     token: blobToken(),
     access: 'public',
     contentType: 'application/json',
-    addRandomSuffix: false,
-    allowOverwrite: true,
-    cacheControlMaxAge: 0
+    // La clave de todo: sufijo aleatorio, así cada escritura es un objeto nuevo
+    // con su propia URL inmutable.
+    addRandomSuffix: true,
+    cacheControlMaxAge: 31536000
   });
-  return doc;
+}
+
+/**
+ * Borra los trozos que ya quedaron guardados dentro del nuevo.
+ *
+ * Sólo se borran los que se leyeron y combinaron en esta misma operación: si
+ * otro dispositivo escribió un trozo mientras tanto, no estaba en la lista y no
+ * se toca. Si dos servidores hacen esto a la vez, los dos escriben un trozo
+ * completo y los dos borran los mismos viejos: borrar es idempotente y el
+ * resultado sigue siendo correcto.
+ */
+async function compact(urls) {
+  if (!urls.length) return;
+  try {
+    const { del } = await import('@vercel/blob');
+    await del(urls, { token: blobToken() });
+  } catch (e) {
+    // Que falle limpiar no es grave: sobra un trozo y se combinará igual.
+    console.error('compactación', e && e.message);
+  }
 }
 
 function parseBody(req) {
@@ -114,7 +171,7 @@ module.exports = async function handler(req, res) {
 
   try {
     if (req.method === 'GET') {
-      const doc = await readDoc();
+      const { doc } = await readDoc();
       return res.status(200).json({ enabled: true, doc, updatedAt: doc.updatedAt || 0 });
     }
 
@@ -124,42 +181,29 @@ module.exports = async function handler(req, res) {
 
       const incoming = Sync.normalizeDoc(body);
       const now = Date.now();
-      let merged = null;
-      let lastErr = null;
 
-      for (let attempt = 0; attempt < WRITE_ATTEMPTS; attempt++) {
-        try {
-          const stored = await readDoc();
-          merged = Sync.mergeDocs(stored, incoming);
-          merged.updatedAt = now;
-          Sync.purgeTombstones(merged, now);
-          await writeDoc(merged);
+      try {
+        const { doc: stored, merged } = await readDoc();
+        const combined = Sync.mergeDocs(stored, incoming);
+        combined.updatedAt = now;
+        Sync.purgeTombstones(combined, now);
 
-          // Releemos para confirmar que lo nuestro quedó. Si otro dispositivo
-          // escribió justo entre nuestro read y nuestro write, su versión pisó
-          // la nuestra: lo detectamos aquí y repetimos la combinación.
-          const verify = await readDoc();
-          if (Sync.contains(verify, incoming)) {
-            merged = verify;
-            break;
-          }
-          lastErr = new Error('carrera de escritura');
-        } catch (e) {
-          if (e && e.code === 'TOO_BIG') {
-            return res.status(413).json({ error: 'Demasiada información para guardar de una vez' });
-          }
-          lastErr = e;
+        await writePart(combined);
+        // Ya está todo dentro del trozo nuevo: los viejos sobran.
+        await compact(merged);
+
+        return res.status(200).json({
+          enabled: true,
+          ok: true,
+          doc: combined,
+          updatedAt: combined.updatedAt
+        });
+      } catch (e) {
+        if (e && e.code === 'TOO_BIG') {
+          return res.status(413).json({ error: 'Demasiada información para guardar de una vez' });
         }
+        throw e;
       }
-
-      if (!merged) throw lastErr || new Error('no se pudo guardar');
-
-      return res.status(200).json({
-        enabled: true,
-        ok: true,
-        doc: merged,
-        updatedAt: merged.updatedAt
-      });
     }
 
     res.setHeader('Allow', 'GET, PUT, POST, OPTIONS');

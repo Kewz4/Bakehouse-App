@@ -12,12 +12,14 @@ const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
 const STUB = path.join(ROOT, 'node_modules', '@vercel', 'blob');
-const FAKE_URL = 'https://blob.test.local/datos/olivo-liora.json';
+const FAKE_BASE = 'https://blob.test.local/';
 
 // --- Blob Store falso -------------------------------------------------------
 // El handler hace `import('@vercel/blob')`, así que el stub tiene que existir
 // como paquete real en node_modules. Se crea aquí y se borra al terminar.
-const store = { payload: null };
+// Ahora el almacén guarda VARIOS objetos inmutables, no uno solo que se pisa.
+// El stub lo imita: cada put crea una URL nueva, y del() borra por URL.
+const store = { parts: new Map(), seq: 0 };
 globalThis.__OLIVO_STORE__ = store;
 
 function installStub() {
@@ -26,12 +28,20 @@ function installStub() {
     JSON.stringify({ name: '@vercel/blob', version: '0.0.0-test', type: 'module', main: 'index.js' }));
   fs.writeFileSync(path.join(STUB, 'index.js'), `
 const store = globalThis.__OLIVO_STORE__;
-export async function list() {
-  return { blobs: store.payload === null ? [] : [{ url: ${JSON.stringify(FAKE_URL)} }] };
+export async function list({ prefix } = {}) {
+  const blobs = [...store.parts.entries()]
+    .filter(([url]) => url.includes(prefix || ''))
+    .map(([url, v]) => ({ url, uploadedAt: v.uploadedAt }));
+  return { blobs };
 }
 export async function put(pathname, payload) {
-  store.payload = String(payload);
-  return { url: ${JSON.stringify(FAKE_URL)} };
+  store.seq += 1;
+  const url = ${JSON.stringify(FAKE_BASE)} + pathname.replace('.json', '') + '-' + store.seq + '.json';
+  store.parts.set(url, { body: String(payload), uploadedAt: new Date(Date.now() + store.seq).toISOString() });
+  return { url };
+}
+export async function del(urls) {
+  for (const u of [].concat(urls)) store.parts.delete(u);
 }
 `);
 }
@@ -43,10 +53,11 @@ function removeStub() {
 // El handler lee el blob con fetch(url + '?t=...'): lo servimos desde memoria.
 const realFetch = globalThis.fetch;
 globalThis.fetch = async function (url, opts) {
-  if (String(url).startsWith(FAKE_URL)) {
-    if (store.payload === null) return { ok: false, status: 404, json: async () => ({}) };
-    const body = store.payload;
-    return { ok: true, status: 200, json: async () => JSON.parse(body) };
+  const key = String(url);
+  if (key.startsWith(FAKE_BASE)) {
+    const part = store.parts.get(key);
+    if (!part) return { ok: false, status: 404, json: async () => ({}) };
+    return { ok: true, status: 200, json: async () => JSON.parse(part.body) };
   }
   return realFetch(url, opts);
 };
@@ -83,7 +94,7 @@ const rec = (id, updatedAt, extra) => Object.assign({ id, updatedAt: at(updatedA
 const grave = (id, ms) => Sync.tombstone(id, at(ms));
 const ids = (d, key) => Sync.live(d, key).map(r => r.id).sort();
 
-test.beforeEach(() => { store.payload = null; });
+test.beforeEach(() => { store.parts.clear(); store.seq = 0; });
 
 test('GET sobre un almacén vacío devuelve un documento vacío, no un error', async () => {
   const r = await call('GET');
@@ -192,4 +203,51 @@ test('una lápida más vieja que 120 días se limpia (y el registro puede volver
   await call('PUT', doc('expenses', [Sync.tombstone('antiguo', viejaMs)]));
   const r = await call('GET');
   assert.equal(r.body.doc.expenses.length, 0, 'la lápida antigua ya no ocupa espacio');
+});
+
+test('un listado atrasado NO pierde lo que escribió el otro dispositivo', async () => {
+  // Esto es lo que falló en producción: el blob público se sirve por CDN y una
+  // lectura devolvió datos de 33 segundos antes. Con un archivo único que se
+  // pisa, eso borra lo que el otro dispositivo acababa de escribir.
+  //
+  // Aquí se simula lo peor: el teléfono escribe, y la laptop escribe DESPUÉS
+  // sin llegar a ver ese objeto. Como nada se sobrescribe, el trozo del
+  // teléfono sigue existiendo y aparece en la siguiente lectura.
+  await call('PUT', doc('sales', [rec('del-telefono', 1000, { product: 'Brownies' })]));
+
+  // El objeto del teléfono se vuelve invisible para el listado, como si el
+  // índice fuera atrasado.
+  const escondido = [...store.parts.entries()][0];
+  store.parts.delete(escondido[0]);
+
+  await call('PUT', doc('sales', [rec('de-la-laptop', 1001, { product: 'Flan' })]));
+
+  // Reaparece: nunca se borró, sólo no se veía.
+  store.parts.set(escondido[0], escondido[1]);
+
+  const r = await call('GET');
+  assert.deepEqual(ids(r.body.doc, 'sales'), ['de-la-laptop', 'del-telefono'],
+    'ninguna de las dos escrituras debe perderse');
+});
+
+test('los trozos ya combinados se limpian para que no se acumulen', async () => {
+  for (let i = 0; i < 5; i++) {
+    await call('PUT', doc('sales', [rec('s' + i, 1000 + i)]));
+  }
+  // Cada escritura pliega los anteriores en uno nuevo y borra los que usó.
+  assert.equal(store.parts.size, 1, 'debería quedar un solo trozo, no ' + store.parts.size);
+
+  const r = await call('GET');
+  assert.deepEqual(ids(r.body.doc, 'sales'), ['s0', 's1', 's2', 's3', 's4']);
+});
+
+test('un trozo corrupto no impide leer los demás', async () => {
+  await call('PUT', doc('sales', [rec('bueno', 1000, { product: 'Flan' })]));
+  // Alguien deja basura en el almacén.
+  store.parts.set(FAKE_BASE + 'datos/olivo-liora-roto.json',
+    { body: 'esto no es json', uploadedAt: new Date().toISOString() });
+
+  const r = await call('GET');
+  assert.deepEqual(ids(r.body.doc, 'sales'), ['bueno'],
+    'lo bueno se sigue leyendo aunque haya un trozo ilegible');
 });
