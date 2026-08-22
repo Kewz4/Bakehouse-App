@@ -19,6 +19,7 @@
   a.btn{display:block;background:var(--green);color:#fff;text-decoration:none;
         border-radius:14px;padding:16px;font-weight:750;box-shadow:0 4px 12px #365b4c2e}
   a.btn:active{transform:scale(.985)}
+  a.btn + a.btn{margin-top:10px}
   .after{font-size:13px;margin:18px 0 0}
   .note{display:none;font-size:13px;color:#96601f;background:#fdf0dc;
         border-radius:12px;padding:12px;margin:18px 0 0}
@@ -30,7 +31,7 @@
     <h1 class="brand">Olivo <span>&amp;</span> Liora</h1>
     <p>Toca el botón y la app se instala sola.</p>
 
-    <a class="btn" id="install" href="#">Instalar en este iPhone</a>
+    <div id="botones"></div>
 
     <p class="after">Después aparece en tu pantalla de inicio, como cualquier otra app.</p>
 
@@ -38,32 +39,51 @@
   </main>
 
 <script>
-// La dirección de instalación se pide al servidor en vez de escribirla aquí:
-// así esta página no hay que tocarla nunca, publique lo que publique el taller.
+// Cada iPhone tiene su propia app firmada: un certificado de KravaSign vale
+// para un solo dispositivo. En la primera instalación todavía no hay app que
+// se identifique sola, así que aquí se enseña un botón por teléfono y quien
+// esté instalando elige el suyo. Después ya no hay que volver por aquí: la app
+// se actualiza sola y sabe cuál es.
+var botones = document.getElementById('botones');
+var nota = document.getElementById('note');
+
+function avisar(texto) {
+  nota.textContent = texto;
+  nota.className = 'note show';
+}
+
 fetch('/api/app-version', { cache: 'no-store' })
   .then(function (r) { return r.json(); })
   .then(function (info) {
-    var note = document.getElementById('note');
-    if (!info || !info.disponible) {
-      document.getElementById('install').style.display = 'none';
-      note.textContent = 'Todavía no hay ninguna versión lista. Vuelve en un rato.';
-      note.className = 'note show';
+    var apps = (info && info.apps) || [];
+    if (!info || !info.disponible || !apps.length) {
+      avisar('Todavía no hay ninguna versión lista. Vuelve en un rato.');
       return;
     }
-    document.getElementById('install').href = info.instalar;
+    apps.forEach(function (app) {
+      var a = document.createElement('a');
+      a.className = 'btn';
+      a.href = app.instalar;
+      a.textContent = apps.length > 1
+        ? 'Instalar en el iPhone de ' + app.nombre
+        : 'Instalar en este iPhone';
+      botones.appendChild(a);
+    });
+    if (apps.length > 1) {
+      avisar('Elige el botón de este iPhone. El otro no se instalará aquí.');
+      nota.className = 'note show';
+      nota.style.background = '#eef3ea';
+      nota.style.color = '#3f5a44';
+    }
   })
   .catch(function () {
-    var note = document.getElementById('note');
-    note.textContent = 'No hay conexión ahora mismo. Inténtalo de nuevo con señal.';
-    note.className = 'note show';
+    avisar('No hay conexión ahora mismo. Inténtalo de nuevo con señal.');
   });
 
 // Esto sólo funciona en un iPhone: en cualquier otro sitio el enlace no hace
 // nada y quedarse mirando un botón muerto es peor que un aviso.
 if (!/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-  var n = document.getElementById('note');
-  n.textContent = 'Abre esta página en el iPhone donde quieras la app.';
-  n.className = 'note show';
+  avisar('Abre esta página en el iPhone donde quieras la app.');
 }
 </script>
 </body>

@@ -2,11 +2,24 @@
  * Olivo & Liora · qué versión de la app hay publicada
  * ===================================================
  *
- * GET /api/app-version -> { disponible, build, version, instalar }
+ * GET /api/app-version?app=<identificador> -> { disponible, build, instalar }
  *
  * La app del iPhone pregunta esto al abrir y al volver del fondo. Si el número
  * de build que hay aquí es mayor que el suyo, enseña un botón "Actualizar" y ya.
  * Ella nunca ve un número de versión ni tiene que ir a ningún sitio a buscarla.
+ *
+ * ---------------------------------------------------------------------------
+ * POR QUÉ HAY QUE DECIR QUÉ APP ERES
+ * ---------------------------------------------------------------------------
+ * Cada certificado de KravaSign vale para UN iPhone y trae su propio
+ * identificador de app. Con dos teléfonos hay dos .ipa distintos publicados, y
+ * mandarle a uno el del otro no es un detalle: un perfil ad-hoc sólo instala en
+ * los dispositivos que lleva dentro, así que la actualización se bajaría entera
+ * y fallaría al final, en el teléfono, sin decir por qué.
+ *
+ * La app manda su propio identificador, que se conoce a sí misma. Sin el
+ * parámetro se contesta la primera variante, que es lo que necesita la página
+ * de instalación y lo que hacía la versión anterior.
  *
  * ---------------------------------------------------------------------------
  * POR QUÉ NO SE USA LA API DE GITHUB
@@ -28,6 +41,24 @@ const TIMEOUT_MS = 8000;
 let cache = { at: 0, value: null };
 const FRESH_MS = 5 * 60 * 1000;
 
+/** Las variantes publicadas, una por iPhone. */
+function normalizeApps(raw) {
+  const lista = Array.isArray(raw && raw.apps) ? raw.apps : [];
+  const apps = lista
+    .filter(a => a && typeof a.bundleId === 'string' && typeof a.ipa === 'string')
+    .map(a => ({
+      bundleId: a.bundleId,
+      ipa: a.ipa,
+      nombre: typeof a.nombre === 'string' ? a.nombre : 'este iPhone'
+    }));
+  if (apps.length) return apps;
+
+  // Una Release de antes de que hubiera varias variantes.
+  if (raw && typeof raw.bundleId === 'string' && typeof raw.ipa === 'string') {
+    return [{ bundleId: raw.bundleId, ipa: raw.ipa, nombre: 'este iPhone' }];
+  }
+  return [];
+}
 async function fetchLatest() {
   const control = new AbortController();
   const timer = setTimeout(() => control.abort(), TIMEOUT_MS);
@@ -43,11 +74,15 @@ async function fetchLatest() {
     // Sin un build numérico no hay nada que comparar, y ofrecer una
     // actualización que no se puede comprobar es peor que no ofrecer ninguna.
     if (!Number.isFinite(build) || build <= 0) return null;
+
+    const apps = normalizeApps(raw);
+    if (!apps.length) return null;
+
     return {
       build,
       version: typeof raw.version === 'string' ? raw.version : null,
-      bundleId: typeof raw.bundleId === 'string' ? raw.bundleId : null,
-      publishedAt: typeof raw.publishedAt === 'string' ? raw.publishedAt : null
+      publishedAt: typeof raw.publishedAt === 'string' ? raw.publishedAt : null,
+      apps
     };
   } catch (err) {
     console.error('app-version', err && err.message);
@@ -72,10 +107,10 @@ function originOf(req) {
 }
 
 /** La dirección que instala la app. iOS la reconoce y hace el resto solo. */
-function installURL(req) {
-  return `itms-services://?action=download-manifest&url=${encodeURIComponent(
-    `${originOf(req)}/instalar/olivo-liora.plist`
-  )}`;
+function installURL(req, bundleId) {
+  const manifest = `${originOf(req)}/instalar/olivo-liora.plist`
+    + `?app=${encodeURIComponent(bundleId)}`;
+  return `itms-services://?action=download-manifest&url=${encodeURIComponent(manifest)}`;
 }
 
 module.exports = async (req, res) => {
@@ -96,12 +131,32 @@ module.exports = async (req, res) => {
     return res.status(200).json({ disponible: false });
   }
 
+  // La app dice quién es; si no lo dice, se contesta la primera variante.
+  const pedido = new URL(req.url, 'https://olivo-liora.vercel.app')
+    .searchParams.get('app');
+  const app = (pedido && info.apps.find(a => a.bundleId === pedido)) || null;
+
+  if (pedido && !app) {
+    // Ese identificador no está publicado. Podría ser una app firmada con un
+    // certificado que ya no se usa: no hay nada que ofrecerle, y ofrecerle el
+    // .ipa de otro teléfono sería peor — no se instalaría.
+    return res.status(200).json({ disponible: false, motivo: 'otra-firma' });
+  }
+
+  const elegida = app || info.apps[0];
   return res.status(200).json({
     disponible: true,
     build: info.build,
     version: info.version,
-    bundleId: info.bundleId,
+    bundleId: elegida.bundleId,
     publicadoEl: info.publishedAt,
-    instalar: installURL(req)
+    instalar: installURL(req, elegida.bundleId),
+    // Para la página de instalación, que tiene que enseñar un botón por iPhone
+    // porque en la primera instalación todavía no hay app que se identifique.
+    apps: info.apps.map(a => ({
+      nombre: a.nombre,
+      bundleId: a.bundleId,
+      instalar: installURL(req, a.bundleId)
+    }))
   });
 };

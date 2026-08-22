@@ -7,7 +7,7 @@
     "@vercel/blob": "^0.27.0"
   },
   "scripts": {
-    "test": "node --test test/sync-core.test.js test/api-data.test.js test/ota.test.js",
+    "test": "node --test test/sync-core.test.js test/api-data.test.js test/ota.test.js test/macros.test.js",
     "test:e2e": "node --test --test-concurrency=1 test/two-devices.test.js",
     "dev": "node test/dev-server.js 4321",
     "fixtures": "node test/make-conformance-fixtures.js && node test/make-math-fixtures.js"

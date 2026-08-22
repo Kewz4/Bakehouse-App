@@ -10,6 +10,14 @@ enum Config {
     static var uploadURL: URL { baseURL.appendingPathComponent("api/upload") }
     static var visionURL: URL { baseURL.appendingPathComponent("api/vision") }
     static var versionURL: URL { baseURL.appendingPathComponent("api/app-version") }
+
+    /// El identificador de esta app concreta.
+    ///
+    /// Cada certificado de KravaSign vale para un solo iPhone y trae el suyo
+    /// propio, así que hay un .ipa publicado por teléfono. La app tiene que
+    /// decir cuál es para que le den el que sí se puede instalar aquí: el del
+    /// otro teléfono se bajaría entero y fallaría justo al final.
+    static var bundleID: String { Bundle.main.bundleIdentifier ?? "" }
 }
 
 /// Lo único que ella llega a ver sobre la sincronización.
@@ -198,7 +206,11 @@ actor SyncClient {
     /// Qué versión hay publicada. `nil` si no hay ninguna o no hay señal: en
     /// ambos casos la app se queda como está y no enseña nada.
     func latestVersion() async -> LatestVersion? {
-        var req = URLRequest(url: Config.versionURL)
+        var componentes = URLComponents(url: Config.versionURL, resolvingAgainstBaseURL: false)
+        componentes?.queryItems = [URLQueryItem(name: "app", value: Config.bundleID)]
+        guard let url = componentes?.url else { return nil }
+
+        var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.cachePolicy = .reloadIgnoringLocalCacheData
         // Esto es lo menos urgente que hace la app: si tarda, que no le quite

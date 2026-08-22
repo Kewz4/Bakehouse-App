@@ -2,11 +2,15 @@
  * Olivo & Liora · el archivo que hace que el iPhone instale la app
  * ================================================================
  *
- * GET /instalar/olivo-liora.plist
+ * GET /instalar/olivo-liora.plist?app=<identificador>
  *
  * iOS no instala un .ipa directamente: instala un "manifest", un XML que le
  * dice de dónde bajarse la app, cómo se llama y qué identificador tiene. El
  * enlace `itms-services://` que abre la app apunta aquí.
+ *
+ * El parámetro dice para qué iPhone. Cada certificado de KravaSign vale para
+ * uno solo, así que hay un .ipa por teléfono y darle a uno el del otro produce
+ * una descarga completa que falla justo al instalarse.
  *
  * ---------------------------------------------------------------------------
  * POR QUÉ EL MANIFEST SE SIRVE DESDE AQUÍ Y EL .IPA DESDE GITHUB
@@ -49,6 +53,27 @@ async function latest() {
   }
 }
 
+/** La variante que toca, o null si no hay ninguna que sirva. */
+function elegir(info, pedido) {
+  if (!info) return null;
+  const lista = (Array.isArray(info.apps) ? info.apps : [])
+    .filter(a => a && typeof a.bundleId === 'string' && typeof a.ipa === 'string');
+
+  // Una Release anterior a que hubiera varias variantes.
+  if (!lista.length && typeof info.bundleId === 'string') {
+    lista.push({ bundleId: info.bundleId, ipa: info.ipa || IPA_URL });
+  }
+  if (!lista.length) return null;
+
+  // Sin parámetro se sirve la primera: es lo que pide la página de instalación
+  // y lo que hacía la versión anterior de esta dirección.
+  if (!pedido) return lista[0];
+  // Con parámetro, sólo la que coincide. Nunca "la que más se parezca": un
+  // .ipa firmado para otro iPhone no se instala, y el error aparece después de
+  // haberla bajado entera.
+  return lista.find(a => a.bundleId === pedido) || null;
+}
+
 function originOf(req) {
   const host = req.headers['x-forwarded-host'] || req.headers.host;
   const proto = req.headers['x-forwarded-proto'] || 'https';
@@ -62,7 +87,10 @@ module.exports = async (req, res) => {
   }
 
   const info = await latest();
-  if (!info || !info.bundleId) {
+  const variante = elegir(info, new URL(req.url, 'https://olivo-liora.vercel.app')
+    .searchParams.get('app'));
+
+  if (!variante) {
     // Sin una versión publicada no hay nada que instalar. Se contesta 404 y no
     // un manifest a medias: iOS con un manifest inválido se queda con un icono
     // gris pegado en la pantalla de inicio, y quitarlo no es evidente.
@@ -70,6 +98,7 @@ module.exports = async (req, res) => {
     return res.status(404).send('Todavía no hay ninguna versión publicada.');
   }
 
+  const titulo = (info && info.title) || 'Olivo & Liora';
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -81,7 +110,7 @@ module.exports = async (req, res) => {
       <array>
         <dict>
           <key>kind</key><string>software-package</string>
-          <key>url</key><string>${xml(info.ipa || IPA_URL)}</string>
+          <key>url</key><string>${xml(variante.ipa)}</string>
         </dict>
         <dict>
           <key>kind</key><string>display-image</string>
@@ -96,10 +125,10 @@ module.exports = async (req, res) => {
       </array>
       <key>metadata</key>
       <dict>
-        <key>bundle-identifier</key><string>${xml(info.bundleId)}</string>
-        <key>bundle-version</key><string>${xml(info.version || '1.0.0')}</string>
+        <key>bundle-identifier</key><string>${xml(variante.bundleId)}</string>
+        <key>bundle-version</key><string>${xml((info && info.version) || '1.0.0')}</string>
         <key>kind</key><string>software</string>
-        <key>title</key><string>${xml(info.title || 'Olivo & Liora')}</string>
+        <key>title</key><string>${xml(titulo)}</string>
       </dict>
     </dict>
   </array>

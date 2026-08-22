@@ -134,14 +134,20 @@ jobs:
       # Con certificados: firma de verdad y Release instalable.
       # ----------------------------------------------------------------------
 
-      - name: Abrir un llavero temporal e importar el certificado
+      - name: Firmar para cada iPhone
         if: env.HAS_SIGNING == 'true'
         env:
           P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
           P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
           PROFILE_BASE64: ${{ secrets.IOS_MOBILEPROVISION_BASE64 }}
+          DEVICE_NAME: ${{ secrets.IOS_DEVICE_NAME }}
+          P12_BASE64_2: ${{ secrets.IOS_P12_BASE64_2 }}
+          P12_PASSWORD_2: ${{ secrets.IOS_P12_PASSWORD_2 }}
+          PROFILE_BASE64_2: ${{ secrets.IOS_MOBILEPROVISION_BASE64_2 }}
+          DEVICE_NAME_2: ${{ secrets.IOS_DEVICE_NAME_2 }}
         run: |
           set -euo pipefail
+
           # El llavero vive sólo lo que dura este trabajo y se borra al final.
           # La contraseña es de usar y tirar: no protege nada más allá de estos
           # pocos minutos dentro de una máquina que se destruye después.
@@ -149,205 +155,87 @@ jobs:
           KEYCHAIN_PASSWORD=$(uuidgen)
           echo "KEYCHAIN=$KEYCHAIN" >> "$GITHUB_ENV"
           echo "::add-mask::$KEYCHAIN_PASSWORD"
-          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> "$GITHUB_ENV"
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
           security set-keychain-settings -lut 21600 "$KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-
-          echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
 
           # Los servicios de firma tipo KravaSign entregan el .p12 ya listo, sin
-          # contraseña, así que el secreto IOS_P12_PASSWORD puede no existir. Se
+          # contraseña, así que el secreto de la contraseña puede no existir. Se
           # prueba lo que haya y, si no abre, la contraseña vacía: dos intentos
           # sobre su propio archivo, para no obligar a nadie a averiguar antes
           # cuál de los dos casos es el suyo.
-          importar () {
-            security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
-              -P "$1" -f pkcs12 -T /usr/bin/codesign -T /usr/bin/security
+          importar_p12 () {
+            local archivo="$1" clave="$2" etiqueta="$3"
+            local mete=(security import "$archivo" -k "$KEYCHAIN" -f pkcs12
+                        -T /usr/bin/codesign -T /usr/bin/security)
+            if "${mete[@]}" -P "$clave"; then
+              return 0
+            elif [ -n "$clave" ] && "${mete[@]}" -P ""; then
+              echo "::warning::El .p12 de $etiqueta no llevaba contraseña; ese secreto sobra."
+              return 0
+            fi
+            echo "::error::No se pudo abrir el .p12 de $etiqueta."
+            echo "Si KravaSign te lo dio sin contraseña, borra el secreto de la contraseña."
+            echo "Y comprueba que pegaste el base64 entero, sin recortar."
+            return 1
           }
 
-          if importar "${P12_PASSWORD:-}"; then
-            :
-          elif [ -n "${P12_PASSWORD:-}" ] && importar ""; then
-            echo "::warning::El .p12 no llevaba contraseña. El secreto IOS_P12_PASSWORD sobra y se puede borrar."
-          else
-            echo "::error::No se pudo abrir el .p12."
-            echo "Si KravaSign te lo dio sin contraseña, borra el secreto IOS_P12_PASSWORD y vuelve a lanzarlo."
-            echo "Si la tiene, revisa que el secreto sea exactamente esa contraseña."
-            echo "Y comprueba que pegaste el .p12 entero: 'base64 -i cert.p12 | pbcopy' y pegar sin recortar."
-            exit 1
-          fi
-          rm -f "$RUNNER_TEMP/cert.p12"
+          # Cada certificado de KravaSign vale para UN iPhone: el perfil lleva
+          # dentro la lista de dispositivos que acepta, y en cualquier otro la
+          # instalación falla. Por eso se firma una vez por teléfono.
+          VARIANTES=()
+          preparar () {
+            local n="$1" p12="$2" clave="$3" perfil="$4" nombre="$5"
+            [ -n "$p12" ] && [ -n "$perfil" ] || return 0
+            echo "$p12"    | base64 --decode > "$RUNNER_TEMP/cert-$n.p12"
+            echo "$perfil" | base64 --decode > "$RUNNER_TEMP/perfil-$n.mobileprovision"
+            importar_p12 "$RUNNER_TEMP/cert-$n.p12" "$clave" "${nombre:-teléfono $n}"
+            rm -f "$RUNNER_TEMP/cert-$n.p12"
+            VARIANTES+=("$n|$nombre")
+          }
+
+          preparar 1 "$P12_BASE64" "${P12_PASSWORD:-}" "$PROFILE_BASE64" "${DEVICE_NAME:-}"
+          preparar 2 "${P12_BASE64_2:-}" "${P12_PASSWORD_2:-}" "${PROFILE_BASE64_2:-}" "${DEVICE_NAME_2:-}"
 
           # Sin esto macOS pregunta por la contraseña del llavero a mitad de la
           # firma, y en un runner sin pantalla eso es un cuelgue de 6 horas.
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN" >/dev/null
-          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
 
           echo "Identidades disponibles:"
           security find-identity -v -p codesigning "$KEYCHAIN" || true
 
-          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
-            | grep -Eo '"[^"]+"' | tr -d '"' | grep -i 'distribution' | head -1 || true)
-          if [ -z "$IDENTITY" ]; then
-            IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" \
-              | grep -Eo '"[^"]+"' | tr -d '"' | head -1 || true)
-          fi
-          [ -n "$IDENTITY" ] || { echo "::error::El .p12 no traía ninguna identidad para firmar."; exit 1; }
-          echo "Firmando como: $IDENTITY"
-          echo "IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
+          rm -f "$RUNNER_TEMP/variantes.jsonl"
+          touch "$RUNNER_TEMP/variantes.jsonl"
+          for v in "${VARIANTES[@]}"; do
+            n="${v%%|*}"; nombre="${v#*|}"
+            # Con dos certificados hay dos identidades en el llavero, y cada
+            # .ipa tiene que firmarse con la que va con su perfil. Se busca la
+            # que el propio perfil lleva dentro, no la primera que aparezca.
+            propia=$(python3 ios/identity-for-profile.py \
+                       "$RUNNER_TEMP/perfil-$n.mobileprovision" "$KEYCHAIN")
+            echo "Perfil $n → identidad: $propia"
 
-          # El perfil dice para qué identificador de app sirve el certificado.
-          # Se lee de ahí en vez de escribirlo a mano: si algún día se regenera
-          # con otro identificador, esto se adapta solo.
-          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
-          security cms -D -i "$RUNNER_TEMP/profile.mobileprovision" > "$RUNNER_TEMP/profile.plist"
-
-          if ! python3 "$GITHUB_WORKSPACE/ios/read-profile.py" \
-                 "$RUNNER_TEMP/profile.plist" > "$RUNNER_TEMP/profile.env"; then
-            exit 1
-          fi
-          eval "$(cat "$RUNNER_TEMP/profile.env")"
-
-          echo "Perfil $UUID · app $BUNDLE_ID · equipo $TEAM_ID · caduca $EXPIRES"
-          {
-            echo "UUID=$UUID"
-            echo "BUNDLE_ID=$BUNDLE_ID"
-            echo "TEAM_ID=$TEAM_ID"
-          } >> "$GITHUB_ENV"
-
-          for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" \
-                     "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
-            mkdir -p "$dir"
-            cp "$RUNNER_TEMP/profile.mobileprovision" "$dir/$UUID.mobileprovision"
+            linea=$(ios/sign.sh "$RUNNER_TEMP/perfil-$n.mobileprovision" "$propia" \
+                      "$KEYCHAIN" "$GITHUB_WORKSPACE/ios/salida" \
+                      "${{ github.run_number }}" "$MARKETING_VERSION")
+            python3 -c 'import json,sys; d=json.loads(sys.argv[1]); d["nombre"]=sys.argv[2] or "este iPhone"; print(json.dumps(d, ensure_ascii=False))' \
+              "$linea" "$nombre" >> "$RUNNER_TEMP/variantes.jsonl"
           done
 
-          # Sólo los permisos que la app usa de verdad, y todos salen del propio
-          # perfil. Pedir de más es la forma más común de que la firma pase y la
-          # instalación falle.
-          cat > "$GITHUB_WORKSPACE/ios/OlivoLiora/OlivoLiora.entitlements" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>application-identifier</key><string>$APP_ID</string>
-            <key>com.apple.developer.team-identifier</key><string>$TEAM_ID</string>
-            <key>get-task-allow</key><false/>
-          </dict>
-          </plist>
-          PLIST
-          plutil -lint "$GITHUB_WORKSPACE/ios/OlivoLiora/OlivoLiora.entitlements"
+          echo "Firmado:"
+          cat "$RUNNER_TEMP/variantes.jsonl"
+          python3 ios/check-variants.py "$RUNNER_TEMP/variantes.jsonl"
 
-      - name: Compilar y archivar firmado
-        if: env.HAS_SIGNING == 'true'
-        working-directory: ios
-        run: |
-          set -euo pipefail
-          xcodebuild \
-            -project OlivoLiora.xcodeproj \
-            -scheme OlivoLiora \
-            -configuration Release \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/OlivoLiora.xcarchive" \
-            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
-            MARKETING_VERSION=$MARKETING_VERSION \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="$IDENTITY" \
-            PROVISIONING_PROFILE_SPECIFIER="$UUID" \
-            CODE_SIGN_ENTITLEMENTS=OlivoLiora/OlivoLiora.entitlements \
-            CODE_SIGNING_ALLOWED=YES \
-            CODE_SIGNING_REQUIRED=YES \
-            OTHER_CODE_SIGN_FLAGS="--keychain $KEYCHAIN" \
-            archive
-
-      - name: Exportar el .ipa
-        if: env.HAS_SIGNING == 'true'
-        working-directory: ios
-        run: |
-          set -euo pipefail
-          ARCHIVE="$RUNNER_TEMP/OlivoLiora.xcarchive"
-
-          # `release-testing` es el nombre nuevo de lo que Xcode llamaba
-          # `ad-hoc`, que es justo lo que es este perfil: firmado para los
-          # iPhones concretos que están en la lista, sin pasar por la App Store.
-          write_options () {
-            cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key><string>$1</string>
-            <key>teamID</key><string>$TEAM_ID</string>
-            <key>signingStyle</key><string>manual</string>
-            <key>signingCertificate</key><string>$IDENTITY</string>
-            <key>provisioningProfiles</key>
-            <dict><key>$BUNDLE_ID</key><string>$UUID</string></dict>
-            <key>stripSwiftSymbols</key><true/>
-            <key>compileBitcode</key><false/>
-            <key>thinning</key><string>&lt;none&gt;</string>
-          </dict>
-          </plist>
-          PLIST
-          }
-
-          export_with () {
-            write_options "$1"
-            xcodebuild -exportArchive \
-              -archivePath "$ARCHIVE" \
-              -exportPath "$RUNNER_TEMP/export" \
-              -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
-          }
-
-          # Xcode 15.3 le cambió el nombre al método. Se prueban los dos para no
-          # atarse a la versión que traiga el runner hoy.
-          rm -rf "$RUNNER_TEMP/export"
-          export_with release-testing || { rm -rf "$RUNNER_TEMP/export"; export_with ad-hoc; }
-
-          IPA=$(find "$RUNNER_TEMP/export" -name '*.ipa' | head -1)
-          [ -n "$IPA" ] || { echo "::error::No salió ningún .ipa del export."; ls -R "$RUNNER_TEMP/export"; exit 1; }
-          cp "$IPA" OlivoLiora.ipa
-          echo "Tamaño: $(du -h OlivoLiora.ipa | cut -f1)"
-
-      - name: Comprobar la firma antes de publicarla
-        if: env.HAS_SIGNING == 'true'
-        working-directory: ios
-        run: |
-          set -euo pipefail
-          # Un .ipa mal firmado se instala igual de mal en el teléfono de ella
-          # que en el mío, pero ella no sabría qué hacer con el error. Así que se
-          # abre aquí y se mira antes de publicarlo.
-          rm -rf "$RUNNER_TEMP/check" && mkdir -p "$RUNNER_TEMP/check"
-          unzip -q OlivoLiora.ipa -d "$RUNNER_TEMP/check"
-          APP=$(find "$RUNNER_TEMP/check/Payload" -maxdepth 1 -name '*.app' | head -1)
-
-          test -f "$APP/embedded.mobileprovision" \
-            || { echo "::error::El .ipa salió sin perfil dentro: el iPhone lo rechazaría."; exit 1; }
-
-          codesign -dv --verbose=4 "$APP" 2>&1 | tee "$RUNNER_TEMP/sig.txt"
-          grep -q "^Authority=" "$RUNNER_TEMP/sig.txt" \
-            || { echo "::error::La app no quedó firmada."; exit 1; }
-          codesign --verify --deep --strict --verbose=2 "$APP"
-
-          ENTS=$(codesign -d --entitlements - --xml "$APP" 2>/dev/null | plutil -convert xml1 -o - - || true)
-          echo "$ENTS"
-          echo "$ENTS" | grep -q "$BUNDLE_ID" \
-            || { echo "::error::Los permisos firmados no son los de $BUNDLE_ID."; exit 1; }
-
-          GOT=$(plutil -extract CFBundleIdentifier raw -o - "$APP/Info.plist")
-          [ "$GOT" = "$BUNDLE_ID" ] \
-            || { echo "::error::La app dice ser $GOT pero el perfil es para $BUNDLE_ID."; exit 1; }
-          echo "Firmada como $GOT, versión $(plutil -extract CFBundleVersion raw -o - "$APP/Info.plist")"
-
-      - name: Guardar el .ipa como artefacto
+      - name: Guardar los .ipa como artefacto
         uses: actions/upload-artifact@v4
         with:
           name: OlivoLiora-ipa
-          path: ios/OlivoLiora.ipa
+          path: |
+            ios/OlivoLiora.ipa
+            ios/salida/*.ipa
           if-no-files-found: error
           retention-days: 90
 
@@ -366,37 +254,29 @@ jobs:
           TAG="ios-$MARKETING_VERSION-$BUILD"
           REPO="${{ github.repository }}"
 
-          # Las dos direcciones fijas que usa el teléfono. `releases/latest/...`
-          # siempre apunta a lo último publicado, así que no hay que consultar la
-          # API de GitHub ni guardar ninguna llave en el servidor.
-          BASE="https://github.com/$REPO/releases/latest/download"
-
-          cat > version.json <<JSON
-          {
-            "version": "$MARKETING_VERSION",
-            "build": $BUILD,
-            "bundleId": "$BUNDLE_ID",
-            "title": "Olivo & Liora",
-            "ipa": "$BASE/OlivoLiora.ipa",
-            "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-            "commit": "${{ github.sha }}"
-          }
-          JSON
-          python3 -c "import json,sys; json.load(open('version.json'))"
-          cat version.json
+          # `releases/latest/download/<archivo>` es una dirección fija que
+          # siempre apunta a lo último publicado, así que ni el teléfono ni el
+          # servidor tienen que consultar la API de GitHub ni guardar llaves.
+          python3 "$GITHUB_WORKSPACE/ios/make-version.py" \
+            "$RUNNER_TEMP/variantes.jsonl" \
+            "https://github.com/$REPO/releases/latest/download" \
+            "$MARKETING_VERSION" "$BUILD" "${{ github.sha }}" > salida/version.json
+          cat salida/version.json
 
           gh release create "$TAG" \
             --repo "$REPO" \
             --title "Olivo & Liora $MARKETING_VERSION ($BUILD)" \
             --notes "$(git log -1 --pretty=%s)" \
             --latest \
-            OlivoLiora.ipa version.json
+            salida/*.ipa salida/version.json
 
-          echo "### La app quedó publicada" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Para instalarla en el iPhone, abre esto en Safari:" >> "$GITHUB_STEP_SUMMARY"
-          echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "<https://olivo-liora.vercel.app/instalar.html>" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### La app quedó publicada"
+            echo ""
+            echo "Para instalarla en un iPhone, ábrelo **en ese iPhone**:"
+            echo ""
+            echo "<https://olivo-liora.vercel.app/instalar.html>"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Cerrar el llavero
         if: always() && env.HAS_SIGNING == 'true'

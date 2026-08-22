@@ -249,25 +249,49 @@ están, sale sin firmar y sólo sirve para comprobar que todo compila.
 El runner compila con **Xcode 26.6 / SDK iPhoneOS 26.5**, así que Liquid Glass
 va incluido de verdad (no es el camino alternativo). Pesa ~550 kB.
 
+#### Un certificado por iPhone
+
+Esto es lo que más se malinterpreta y lo que más caro sale: **un certificado de
+KravaSign vale para UN teléfono**. El perfil lleva dentro la lista de
+dispositivos que acepta, y en cualquier otro la instalación falla — después de
+haberse bajado la app entera, y sin decir por qué.
+
+Así que con dos iPhones hay dos certificados, dos identificadores de app y dos
+`.ipa` publicados. Cada teléfono pide el suyo, porque la app sabe cómo se llama
+a sí misma y lo manda al preguntar si hay algo nuevo.
+
+Cómo comprobar cuántos dispositivos cubre un perfil:
+
+```bash
+security cms -D -i perfil.mobileprovision | plutil -p - | grep -A5 ProvisionedDevices
+```
+
 #### Los secretos
 
 En *Settings → Secrets and variables → Actions*:
 
 | Secreto | Qué es |
 |---|---|
-| `IOS_P12_BASE64` | el `.p12` de distribución, en base64 |
-| `IOS_MOBILEPROVISION_BASE64` | el perfil **ad-hoc**, en base64 |
-| `IOS_P12_PASSWORD` | *opcional* — sólo si el `.p12` lleva contraseña |
+| `IOS_P12_BASE64` | el `.p12` del primer iPhone, en base64 |
+| `IOS_MOBILEPROVISION_BASE64` | su perfil **ad-hoc**, en base64 |
+| `IOS_DEVICE_NAME` | *opcional* — el nombre que sale en la página de instalación |
+| `IOS_P12_BASE64_2` | igual, para el segundo iPhone |
+| `IOS_MOBILEPROVISION_BASE64_2` | su perfil |
+| `IOS_DEVICE_NAME_2` | *opcional* |
+| `IOS_P12_PASSWORD` / `_2` | *opcional* — sólo si el `.p12` lleva contraseña |
 
 KravaSign y los servicios de firma parecidos entregan el `.p12` sin contraseña,
-así que lo normal es no crear el tercero. El workflow no lo exige: prueba con lo
-que haya y, si no abre, con la contraseña vacía. Si sobra, lo dice y sigue.
+así que lo normal es no crear los de la contraseña. El workflow no los exige:
+prueba con lo que haya y, si no abre, con la contraseña vacía.
+
+Con un solo juego de secretos todo funciona igual, pero el workflow avisa de que
+sólo hay un iPhone cubierto.
 
 Para sacar el base64, en un Mac:
 
 ```bash
-base64 -i cert.p12            | pbcopy   # → IOS_P12_BASE64
-base64 -i perfil.mobileprovision | pbcopy # → IOS_MOBILEPROVISION_BASE64
+base64 -i cert.p12               | pbcopy
+base64 -i perfil.mobileprovision | pbcopy
 ```
 
 Los archivos en sí **no van al repositorio**: un `.p12` lleva dentro la clave
@@ -280,7 +304,10 @@ arranca con Xcode conectado.
 #### De dónde sale el identificador de la app
 
 Del propio perfil, no de `project.yml`. El workflow lo lee con
-`ios/read-profile.py` y se lo pasa a `xcodebuild`.
+`ios/read-profile.py` y se lo pasa a `xcodebuild`. Con dos certificados en el
+mismo llavero, `ios/identity-for-profile.py` empareja cada perfil con el
+certificado que ese perfil acepta — firmarlo con el del otro produce un `.ipa`
+que se publica sin quejarse y falla al instalarse.
 
 Importa porque **iOS decide por el identificador si actualiza la app que ya está
 instalada o si instala una segunda al lado**. Si no coincide, ella acabaría con
@@ -302,11 +329,15 @@ GitHub Release  ──►  /api/app-version  ──►  la app compara el númer
                           (itms-services)
 ```
 
-* **`/api/app-version`** lee `version.json` de la última Release y dice qué hay.
-* **`/instalar/olivo-liora.plist`** es el archivo que iOS necesita para
-  instalar; apunta al `.ipa` de la Release.
+* **`/api/app-version?app=<id>`** lee `version.json` de la última Release y
+  dice qué hay **para ese iPhone**. Si el identificador no está publicado
+  contesta que no hay nada, en vez de ofrecer el `.ipa` de otro teléfono: ése
+  se bajaría entero y fallaría al instalarse.
+* **`/instalar/olivo-liora.plist?app=<id>`** es el archivo que iOS necesita
+  para instalar; apunta al `.ipa` de ese teléfono.
 * **`/instalar.html`** es la página para la **primera** instalación, la única
-  vez que hace falta abrir algo en Safari.
+  vez que hace falta abrir algo en Safari. Enseña un botón por iPhone, porque
+  en la primera instalación todavía no hay app que se identifique sola.
 
 La comparación se hace sobre `CFBundleVersion`, que es el número de la
 ejecución del workflow y sube siempre. Comparar enteros no tiene casos raros;
@@ -404,6 +435,9 @@ ios/OlivoLioraCore/                         núcleo sin SwiftUI (compila en Linu
 ios/OlivoLiora/                             la app SwiftUI
 ios/project.yml                             el .xcodeproj se genera con XcodeGen
 ios/read-profile.py                         lee el identificador del perfil de firma
+ios/identity-for-profile.py                 empareja cada perfil con su certificado
+ios/sign.sh                                 firma la app para un iPhone
+ios/make-version.py  ios/check-variants.py  arman y revisan lo que se publica
 ```
 
 El `.xcodeproj` no se guarda en el repositorio: el formato `.pbxproj` es
