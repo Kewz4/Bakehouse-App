@@ -156,10 +156,26 @@ jobs:
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
 
           echo "$P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
-          if ! security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
-                 -P "${P12_PASSWORD:-}" -f pkcs12 \
-                 -T /usr/bin/codesign -T /usr/bin/security; then
-            echo "::error::No se pudo abrir el .p12. Casi siempre es la contraseña: revisa el secreto IOS_P12_PASSWORD."
+
+          # Los servicios de firma tipo KravaSign entregan el .p12 ya listo, sin
+          # contraseña, así que el secreto IOS_P12_PASSWORD puede no existir. Se
+          # prueba lo que haya y, si no abre, la contraseña vacía: dos intentos
+          # sobre su propio archivo, para no obligar a nadie a averiguar antes
+          # cuál de los dos casos es el suyo.
+          importar () {
+            security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+              -P "$1" -f pkcs12 -T /usr/bin/codesign -T /usr/bin/security
+          }
+
+          if importar "${P12_PASSWORD:-}"; then
+            :
+          elif [ -n "${P12_PASSWORD:-}" ] && importar ""; then
+            echo "::warning::El .p12 no llevaba contraseña. El secreto IOS_P12_PASSWORD sobra y se puede borrar."
+          else
+            echo "::error::No se pudo abrir el .p12."
+            echo "Si KravaSign te lo dio sin contraseña, borra el secreto IOS_P12_PASSWORD y vuelve a lanzarlo."
+            echo "Si la tiene, revisa que el secreto sea exactamente esa contraseña."
+            echo "Y comprueba que pegaste el .p12 entero: 'base64 -i cert.p12 | pbcopy' y pegar sin recortar."
             exit 1
           fi
           rm -f "$RUNNER_TEMP/cert.p12"

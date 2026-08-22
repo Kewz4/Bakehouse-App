@@ -249,15 +249,19 @@ están, sale sin firmar y sólo sirve para comprobar que todo compila.
 El runner compila con **Xcode 26.6 / SDK iPhoneOS 26.5**, así que Liquid Glass
 va incluido de verdad (no es el camino alternativo). Pesa ~550 kB.
 
-#### Los tres secretos
+#### Los secretos
 
 En *Settings → Secrets and variables → Actions*:
 
 | Secreto | Qué es |
 |---|---|
 | `IOS_P12_BASE64` | el `.p12` de distribución, en base64 |
-| `IOS_P12_PASSWORD` | la contraseña con la que se exportó ese `.p12` |
 | `IOS_MOBILEPROVISION_BASE64` | el perfil **ad-hoc**, en base64 |
+| `IOS_P12_PASSWORD` | *opcional* — sólo si el `.p12` lleva contraseña |
+
+KravaSign y los servicios de firma parecidos entregan el `.p12` sin contraseña,
+así que lo normal es no crear el tercero. El workflow no lo exige: prueba con lo
+que haya y, si no abre, con la contraseña vacía. Si sobra, lo dice y sigue.
 
 Para sacar el base64, en un Mac:
 
