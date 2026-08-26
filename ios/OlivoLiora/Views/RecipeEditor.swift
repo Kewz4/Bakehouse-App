@@ -430,7 +430,7 @@ struct RecipeEditor: View {
             guard !label.isEmpty, qty > 0 else { return nil }
             // Sin redondear: a $0.0028661 el gramo, recortar decimales metía un
             // 1.2% de error en el costo de la receta.
-            let cost = ing.map { $0.baseCost * Units.info(line.unit).factor } ?? line.cost
+            let cost = ing.flatMap { $0.lineUnitCost(line.unit) } ?? line.cost
             return RecipeLine(ingredientId: ing?.id, name: label, qty: qty, unit: line.unit, cost: cost)
         }
 
@@ -453,16 +453,29 @@ private struct LineEditor: View {
     let onRemove: () -> Void
 
     @State private var showPicker = false
+    /// La conversión que se está explicando, si tocó la (i).
+    @State private var shownConversion: Conversion?
 
     private var ingredient: Ingredient? {
         store.ingredients.first { $0.id == line.ingredientId }
     }
 
-    /// Sólo se ofrecen unidades de la misma familia que el ingrediente: si se
-    /// compra en libras se puede usar en gramos, pero nunca en mililitros.
+    /// Las unidades que se le pueden ofrecer a esta línea.
+    ///
+    /// Todas las que se pueden convertir de verdad: las de su familia, más las
+    /// de la otra cuando se sabe cuánto pesa una pieza — leche comprada en
+    /// litros se mide en cucharadas, y mantequilla comprada por barras se mide
+    /// en gramos. Las que harían falta una densidad no se ofrecen, porque
+    /// ofrecerlas sería prometer una cuenta que no se puede hacer.
     private var unitChoices: [MeasureUnit] {
         guard let ing = ingredient else { return Units.all }
-        return Units.inFamily(Units.family(ing.unitSingle))
+        return Units.all.filter { ing.unitFactor($0.key) != nil }
+    }
+
+    /// Qué se convirtió, si es que hubo conversión.
+    private var conversion: Conversion? {
+        guard let ing = ingredient else { return nil }
+        return ing.conversion(to: line.unit, qty: Quantity.parse(line.qty))
     }
 
     private var lineTotal: Double { Quantity.parse(line.qty) * line.cost }
@@ -528,9 +541,39 @@ private struct LineEditor: View {
                     .font(Theme.rounded(12))
                     .foregroundStyle(Theme.muted)
             }
+
+            // Cuando la unidad de la receta no es la de la compra, se dice. Un
+            // costo que aparece solo, sin explicar de dónde salió, es un costo
+            // en el que no se confía.
+            if let c = conversion {
+                Button { shownConversion = c } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "arrow.left.arrow.right")
+                            .font(.system(size: 9, weight: .bold))
+                        Text(c.texto)
+                            .font(Theme.rounded(11, .bold))
+                        Image(systemName: "info.circle.fill")
+                            .font(.system(size: 11))
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .background(Theme.sage, in: Capsule())
+                    .foregroundStyle(Theme.green)
+                }
+                .buttonStyle(.plain)
+                .transition(.scale(scale: 0.94).combined(with: .opacity))
+            }
         }
         .padding(12)
         .background(Color(hex: 0xF8F7F1), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .animation(.snappy(duration: 0.24), value: conversion)
+        .alert("Conversión automática", isPresented: Binding(
+            get: { shownConversion != nil },
+            set: { if !$0 { shownConversion = nil } }
+        ), presenting: shownConversion) { _ in
+            Button("Entendido", role: .cancel) {}
+        } message: { c in
+            Text("\(c.texto)\n\n\(c.detalle)")
+        }
         .sheet(isPresented: $showPicker) {
             IngredientPicker(selectedId: line.ingredientId) { picked in
                 guard let picked else {
@@ -552,7 +595,15 @@ private struct LineEditor: View {
 
     private func recomputeCost() {
         guard let ing = ingredient else { return }
-        line.cost = ing.baseCost * Units.info(line.unit).factor
+        // Puede cruzar de contar a pesar cuando se sabe cuánto pesa una pieza.
+        // Si la conversión no se puede hacer, la unidad elegida ya no sirve
+        // para este ingrediente y se vuelve a la suya.
+        if let c = ing.lineUnitCost(line.unit) {
+            line.cost = c
+        } else {
+            line.unit = ing.unitSingle
+            line.cost = ing.baseCost
+        }
     }
 }
 

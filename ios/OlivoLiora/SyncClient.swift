@@ -9,6 +9,7 @@ enum Config {
     static var dataURL: URL { baseURL.appendingPathComponent("api/data") }
     static var uploadURL: URL { baseURL.appendingPathComponent("api/upload") }
     static var visionURL: URL { baseURL.appendingPathComponent("api/vision") }
+    static var nutritionURL: URL { baseURL.appendingPathComponent("api/nutrition") }
     static var versionURL: URL { baseURL.appendingPathComponent("api/app-version") }
 
     /// El identificador de esta app concreta.
@@ -226,6 +227,58 @@ actor SyncClient {
         else { return nil }
 
         return LatestVersion(build: build, install: install)
+    }
+
+    // MARK: - Nutrición de lo que no trae etiqueta
+
+    struct Reference: Sendable {
+        var ok: Bool
+        var nombre: String?
+        /// Ya en la base en que se guardan; el servidor hace la conversión con
+        /// el mismo código que la web.
+        var macros: [String: Double?] = [:]
+        var gramosPorPieza: Double?
+        var esFruta = false
+        var confianza = "media"
+        var mensaje: String?
+    }
+
+    private struct ReferenceEnvelope: Decodable {
+        let ok: Bool?
+        let nombre: String?
+        let macros: [String: Double?]?
+        let gramosPorPieza: Double?
+        let esFruta: Bool?
+        let confianza: String?
+        let mensaje: String?
+    }
+
+    /// Busca los datos de una fruta o verdura por su nombre, sin foto.
+    ///
+    /// Una banana no trae tabla pegada, pero sus valores son conocimiento
+    /// general. El modelo aporta la referencia; las cuentas las hace el
+    /// servidor con business-core.js, no el modelo.
+    func referenceNutrition(name: String, unitSingle: String,
+                            gramsPerPiece: Double) async throws -> Reference {
+        var req = URLRequest(url: Config.nutritionURL)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 40
+        req.httpBody = try JSONSerialization.data(withJSONObject: [
+            "nombre": name,
+            "unitSingle": unitSingle,
+            "gramosPorPieza": gramsPerPiece.isFinite ? gramsPerPiece : 0
+        ])
+
+        let (data, response) = try await session.data(for: req)
+        try check(response)
+        let env = try JSONDecoder().decode(ReferenceEnvelope.self, from: data)
+        return Reference(ok: env.ok == true, nombre: env.nombre,
+                         macros: env.macros ?? [:],
+                         gramosPorPieza: env.gramosPorPieza,
+                         esFruta: env.esFruta == true,
+                         confianza: env.confianza ?? "media",
+                         mensaje: env.mensaje)
     }
 
     private func check(_ response: URLResponse) throws {

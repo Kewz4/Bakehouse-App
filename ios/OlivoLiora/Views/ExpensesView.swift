@@ -7,29 +7,37 @@ struct ExpensesView: View {
     @State private var editing: Expense?
     @State private var creating = false
 
+    /// Se mira la lista ENTERA, no la filtrada por fecha: un gasto recurrente
+    /// se anota una vez y sigue valiendo los meses siguientes, así que
+    /// filtrarlo por su fecha lo haría desaparecer.
     private var filtered: [Expense] {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return q.isEmpty ? store.expenses : store.expenses.filter {
-            $0.name.lowercased().contains(q) || $0.category.lowercased().contains(q)
+        return store.allExpenses.filter { e in
+            let coincide = q.isEmpty || e.name.lowercased().contains(q)
+                || e.category.lowercased().contains(q)
+            guard coincide else { return false }
+            return e.kind == .recurrente || store.amountInPeriod(e) > 0
         }
     }
 
     var body: some View {
         ListScaffold(
-            title: "Gastos",
+            title: "Inversión",
             detail: Labels.join(
                 store.period.label,
-                Labels.count(shown: filtered.count, total: store.expenses.count,
-                             singular: "gasto", plural: "gastos")),
-            searchPrompt: "Buscar gasto…",
+                Labels.count(shown: filtered.count, total: filtered.count,
+                             singular: "movimiento", plural: "movimientos")),
+            searchPrompt: "Buscar…",
             search: $search,
-            addLabel: "Registrar gasto",
+            addLabel: "Registrar",
             onAdd: { creating = true },
             isEmpty: filtered.isEmpty,
             emptyText: search.isEmpty
-                ? "Aquí aparecerán tus gastos: gas, cajas, entregas…"
-                : "Ningún gasto coincide con tu búsqueda."
+                ? "Aquí van tus gastos y tus inversiones: el gas, las cajas, y también la batidora."
+                : "Nada coincide con tu búsqueda."
         ) {
+            totals.plainRow()
+
             ForEach(filtered) { expense in
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 6) {
@@ -40,13 +48,31 @@ struct ExpensesView: View {
                             Text(DayString.short(expense.date))
                                 .font(Theme.rounded(12))
                                 .foregroundStyle(Theme.muted)
-                            Chip(text: expense.category)
+                            Chip(text: expense.kind.label)
+                            if expense.kind == .recurrente {
+                                Text(expense.frequency.label)
+                                    .font(Theme.rounded(11, .semibold))
+                                    .foregroundStyle(Theme.muted)
+                            } else {
+                                Chip(text: expense.category)
+                            }
                         }
                     }
                     Spacer(minLength: 8)
-                    Text(Money.format(expense.amount))
-                        .font(Theme.rounded(16, .heavy))
-                        .foregroundStyle(Theme.red)
+                    VStack(alignment: .trailing, spacing: 2) {
+                        let enPeriodo = store.amountInPeriod(expense)
+                        Text(Money.format(enPeriodo > 0 ? enPeriodo : expense.amount))
+                            .font(Theme.rounded(16, .heavy))
+                            // La inversión no es una pérdida: es dinero puesto
+                            // en el negocio. No se pinta en rojo.
+                            .foregroundStyle(expense.kind == .inversion ? Theme.ink : Theme.red)
+                        let veces = store.occurrencesInPeriod(expense)
+                        if veces > 1 {
+                            Text("\(Money.format(expense.amount)) cada vez")
+                                .font(Theme.rounded(11))
+                                .foregroundStyle(Theme.muted)
+                        }
+                    }
                 }
                 .padding(14)
                 .panelCard()
@@ -60,6 +86,27 @@ struct ExpensesView: View {
         .sheet(isPresented: $creating) { ExpenseEditor(expense: nil) }
         .sheet(item: $editing) { ExpenseEditor(expense: $0) }
     }
+
+    /// Los cuatro números de arriba.
+    ///
+    /// "Invertido en total" no mira el período a propósito: lo que se quiere
+    /// saber es cuánto lleva puesto en el negocio desde el principio, y eso no
+    /// cambia porque se mire un mes u otro.
+    private var totals: some View {
+        let m = store.metrics
+        return LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
+                                   GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            MetricTile(caption: "Invertido en total", value: Money.format(m.investmentEver),
+                       note: "Desde el principio")
+            MetricTile(caption: "Invertido aquí", value: Money.format(m.investmentPeriod),
+                       note: "Maquinaria y compras de una vez")
+            MetricTile(caption: "Gastos recurrentes", value: Money.format(m.recurringTotal),
+                       note: "Lo que se repite solo")
+            MetricTile(caption: "Gastos sueltos", value: Money.format(m.oneOffTotal),
+                       note: "Compras de este período")
+        }
+        .padding(.bottom, 4)
+    }
 }
 
 struct ExpenseEditor: View {
@@ -72,6 +119,8 @@ struct ExpenseEditor: View {
     @State private var name = ""
     @State private var category = "Servicios"
     @State private var amount = ""
+    @State private var kind: ExpenseKind = .gasto
+    @State private var frequency: ExpenseFrequency = .mensual
     @State private var loaded = false
 
     private var canSave: Bool {
@@ -80,8 +129,22 @@ struct ExpenseEditor: View {
     }
 
     var body: some View {
-        EditorScaffold(title: expense == nil ? "Registrar gasto" : "Editar gasto",
+        EditorScaffold(title: expense == nil ? "Registrar" : "Editar",
                        canSave: canSave, onSave: commit) {
+            // Tres cosas distintas que antes eran una sola. La inversión se
+            // cuenta aparte y NO se resta de la ganancia del mes: una batidora
+            // se compra una vez y trabaja durante años.
+            Picker("Qué es", selection: $kind) {
+                ForEach(ExpenseKind.allCases, id: \.self) { k in Text(k.label).tag(k) }
+            }
+            .pickerStyle(.segmented)
+            .tint(Theme.green)
+
+            Text(kind.detail)
+                .font(Theme.rounded(12))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+
             DatePicker("Fecha", selection: $date, displayedComponents: .date)
                 .font(Theme.rounded(15))
                 .environment(\.locale, Locale(identifier: "es"))
@@ -104,7 +167,26 @@ struct ExpenseEditor: View {
             }
 
             MoneyField(label: "Monto", value: $amount)
+
+            if kind == .recurrente {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("¿Cada cuánto se repite?")
+                        .font(Theme.rounded(12, .bold)).foregroundStyle(Theme.muted)
+                    Picker("Frecuencia", selection: $frequency) {
+                        ForEach(ExpenseFrequency.allCases, id: \.self) { f in
+                            Text(f.label).tag(f)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .tint(Theme.green)
+                    Text("Se anota una vez y se cuenta solo cada período, desde la fecha de arriba. No hay que volver a escribirlo cada mes.")
+                        .font(Theme.rounded(11))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
+        .animation(.snappy(duration: 0.22), value: kind)
         .onAppear(perform: load)
     }
 
@@ -116,6 +198,8 @@ struct ExpenseEditor: View {
             name = e.name
             category = e.category
             amount = e.amount > 0 ? String(format: "%.2f", e.amount) : ""
+            kind = e.kind
+            frequency = e.frequency
         }
     }
 
@@ -126,6 +210,8 @@ struct ExpenseEditor: View {
         record.name = name.trimmingCharacters(in: .whitespaces)
         record.category = category
         record.amount = Double(amount.replacingOccurrences(of: ",", with: ".")) ?? 0
+        record.setKind(kind)
+        record.setFrequency(frequency)
         store.save(record)
         dismiss()
     }

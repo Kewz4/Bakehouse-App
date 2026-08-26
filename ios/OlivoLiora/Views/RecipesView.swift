@@ -9,6 +9,8 @@ struct RecipesView: View {
     @State private var calcCost = ""
     @State private var calcPercent = "65"
     @State private var calcMode: PriceCalculator.Mode = .margin
+    /// La receta cuyo precio se está calculando en la ventana.
+    @State private var calcFor: Recipe?
     /// Etiqueta por la que se está filtrando. Vacío = todas.
     @State private var badgeFilter = ""
 
@@ -47,9 +49,7 @@ struct RecipesView: View {
                     macros: store.macros(of: recipe),
                     badges: store.badges(of: recipe),
                     onDuplicate: { store.duplicate(recipe) },
-                    onUseInCalculator: {
-                        calcCost = String(format: "%.2f", recipe.unitCost)
-                    })
+                    onUseInCalculator: { calcFor = recipe })
                     .contentShape(Rectangle())
                     .onTapGesture { editing = recipe }
                     .plainRow()
@@ -57,11 +57,8 @@ struct RecipesView: View {
                                 onDelete: { store.delete(id: recipe.id, from: .recipes) })
             }
 
-            Group {
-                PriceCalculatorPanel(cost: $calcCost, percent: $calcPercent, mode: $calcMode)
-                TipsPanel()
-            }
-            .plainRow(vertical: 8)
+            PriceCalculatorPanel(cost: $calcCost, percent: $calcPercent, mode: $calcMode)
+                .plainRow(vertical: 8)
         }
         .listStyle(.plain)
         .environment(\.defaultMinListRowHeight, 0)
@@ -75,6 +72,13 @@ struct RecipesView: View {
         }
         .sheet(isPresented: $creating) { RecipeEditor(recipe: nil) }
         .sheet(item: $editing) { RecipeEditor(recipe: $0) }
+        .sheet(item: $calcFor) { receta in
+            PriceCalculatorSheet(recipe: receta) { precio in
+                var actualizada = receta
+                actualizada.price = (precio * 100).rounded() / 100
+                store.save(actualizada)
+            }
+        }
     }
 
     /// Chips para filtrar por dieta. Sólo salen las etiquetas que alguna receta
@@ -245,6 +249,9 @@ struct PriceCalculatorPanel: View {
     @Binding var cost: String
     @Binding var percent: String
     @Binding var mode: PriceCalculator.Mode
+    /// Cuando se abre desde una receta: su nombre, y qué hacer con el precio.
+    var recipeName: String? = nil
+    var onApply: ((Double) -> Void)? = nil
 
     private var result: PriceCalculator.Result {
         PriceCalculator.compute(
@@ -256,9 +263,16 @@ struct PriceCalculatorPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("¿Cuánto cobrar?").font(Theme.title(21)).foregroundStyle(Theme.ink)
-            Text("Escribe cuánto te cuesta hacer una porción y cuánto quieres ganar.")
-                .font(Theme.rounded(12))
-                .foregroundStyle(Theme.muted)
+            if let n = recipeName {
+                Text("Una porción de \(n) te cuesta \(Money.format(Double(cost.replacingOccurrences(of: ",", with: ".")) ?? 0)).")
+                    .font(Theme.rounded(12))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("Escribe cuánto te cuesta hacer una porción y cuánto quieres ganar.")
+                    .font(Theme.rounded(12))
+                    .foregroundStyle(Theme.muted)
+            }
 
             Picker("Modo", selection: $mode) {
                 ForEach(PriceCalculator.Mode.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -280,6 +294,15 @@ struct PriceCalculatorPanel: View {
                 .background(Color.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(Theme.line, lineWidth: 1))
+
+                // El deslizador es la forma rápida; el campo, la exacta. Los
+                // dos escriben en el mismo sitio.
+                Slider(value: Binding(
+                    get: { min(Double(percent.replacingOccurrences(of: ",", with: ".")) ?? 0,
+                               mode == .margin ? 95 : 300) },
+                    set: { percent = String(Int($0.rounded())) }
+                ), in: 0...(mode == .margin ? 95 : 300), step: 1)
+                .tint(Theme.green)
             }
 
             VStack(alignment: .leading, spacing: 3) {
@@ -302,40 +325,71 @@ struct PriceCalculatorPanel: View {
                     .foregroundStyle(result.isWarning ? Theme.red : Theme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
+
+            // Sólo cuando se abre desde una receta: el precio se le pone a esa
+            // receta sin tener que entrar al editor.
+            if let apply = onApply {
+                Button("Ponerle este precio") { apply(result.price) }
+                    .primaryActionStyle()
+                    .frame(maxWidth: .infinity)
+                    .disabled(!(result.price > 0))
+            }
         }
         .padding(18)
         .background(
-            LinearGradient(colors: [Color(hex: 0xE6EFE2), Color(hex: 0xFBF7EB)],
+            LinearGradient(colors: [Color(hex: 0xF6ECEA), Color(hex: 0xFAF4EC)],
                            startPoint: .topLeading, endPoint: .bottomTrailing),
             in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-            .stroke(Color(hex: 0xD7E2D1), lineWidth: 1))
+            .stroke(Color(hex: 0xECDCD8), lineWidth: 1))
     }
 }
 
-struct TipsPanel: View {
-    private let tips: [(String, String)] = [
-        ("1. Calcula tus insumos", "Incluye empaques y mermas."),
-        ("2. Añade costos indirectos", "Gas, luz, transporte y tu tiempo."),
-        ("3. Revisa cuánto te queda", "Que te queden 60 a 70 centavos de cada dólar."),
-        ("4. Ojo con los porcentajes", "Ganar el 50% del precio es lo mismo que cobrar el doble de lo que te cuesta.")
-    ]
+/// La calculadora en una ventana, abierta desde una receta.
+///
+/// Es el MISMO panel de la pantalla de recetas — los mismos dos modos, el mismo
+/// deslizador — para que no haya que aprender dos cosas que hacen lo mismo. Se
+/// abre con el costo de esa receta ya puesto, que es el dato que hace falta y
+/// el que nadie se sabe de memoria.
+struct PriceCalculatorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let recipe: Recipe
+    let onApply: (Double) -> Void
+
+    @State private var cost: String
+    @State private var percent = "65"
+    @State private var mode: PriceCalculator.Mode = .margin
+
+    init(recipe: Recipe, onApply: @escaping (Double) -> Void) {
+        self.recipe = recipe
+        self.onApply = onApply
+        _cost = State(initialValue: String(format: "%.2f", recipe.unitCost))
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Cómo definir tu precio").font(Theme.title(21)).foregroundStyle(Theme.ink)
-            VStack(spacing: 0) {
-                ForEach(tips, id: \.0) { tip in
-                    DotRow(title: tip.0, subtitle: tip.1)
+        NavigationStack {
+            ScrollView {
+                PriceCalculatorPanel(cost: $cost, percent: $percent, mode: $mode,
+                                     recipeName: recipe.name) { precio in
+                    onApply(precio)
+                    dismiss()
+                }
+                .padding(16)
+            }
+            .background(Theme.cream)
+            .scrollIndicators(.hidden)
+            .navigationTitle("¿Cuánto cobrar?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cerrar") { dismiss() }.tint(Theme.muted)
                 }
             }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(18)
-        .panelCard()
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
-
 /// Etiquetas de dieta en varias filas, sin que se salgan de la tarjeta.
 struct FlowChips: View {
     let badges: [DietBadge]

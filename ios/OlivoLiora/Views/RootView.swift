@@ -40,7 +40,7 @@ struct RootView: View {
             NavigationStack { SalesView() }
                 .tabItem { Label("Ventas", systemImage: "chart.bar.fill") }
             NavigationStack { ExpensesView() }
-                .tabItem { Label("Gastos", systemImage: "creditcard.fill") }
+                .tabItem { Label("Inversión", systemImage: "creditcard.fill") }
             NavigationStack { IngredientsView() }
                 .tabItem { Label("Ingredientes", systemImage: "shippingbox.fill") }
         }

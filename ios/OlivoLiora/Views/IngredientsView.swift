@@ -7,11 +7,15 @@ struct IngredientsView: View {
     @State private var search = ""
     @State private var editing: Ingredient?
     @State private var creating = false
+    /// Qué categoría se está mirando. `nil` = todas.
+    @State private var kindFilter: IngredientKind?
 
     private var filtered: [Ingredient] {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
-        return q.isEmpty ? store.ingredients
-            : store.ingredients.filter { $0.name.lowercased().contains(q) }
+        return store.ingredients.filter { ing in
+            (q.isEmpty || ing.name.lowercased().contains(q))
+                && (kindFilter == nil || ing.kind == kindFilter)
+        }
     }
 
     var body: some View {
@@ -28,26 +32,38 @@ struct IngredientsView: View {
                 ? "Guarda cada ingrediente una vez y podrás usarlo en todas tus recetas."
                 : "Ningún ingrediente coincide con tu búsqueda."
         ) {
+            kindFilters.plainRow()
+
             ForEach(filtered) { ing in
                 let short = Units.info(ing.unitSingle).short
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(ing.name)
+                        Text("\(ing.kind.emoji) \(ing.name)")
                             .font(Theme.rounded(16, .semibold))
                             .foregroundStyle(Theme.ink)
-                        Text("\(ing.unit) de \(Quantity.pretty(ing.quantity)) \(short) · \(Money.format(ing.price))")
+                        // Si dijo cuánto pesa cada uno, se enseña: es el dato
+                        // que hace que una receta pueda pedir gramos de algo
+                        // que se compra por piezas.
+                        let pieza = ing.pieceWeight.map {
+                            " · cada uno \(Quantity.pretty($0.amount)) \(Units.info($0.unit).short)"
+                        } ?? ""
+                        Text("\(ing.unit) de \(Quantity.pretty(ing.quantity)) \(short)\(pieza) · \(Money.format(ing.price))")
                             .font(Theme.rounded(12))
                             .foregroundStyle(Theme.muted)
                     }
                     Spacer(minLength: 8)
-                    VStack(alignment: .trailing, spacing: 2) {
-                        let cost = ing.displayCost
-                        Text(Money.format(cost.amount))
-                            .font(Theme.rounded(16, .heavy))
-                            .foregroundStyle(Theme.ink)
-                        Text("por \(cost.unit)")
-                            .font(Theme.rounded(11))
-                            .foregroundStyle(Theme.muted)
+                    // Puede decir dos cosas: por pieza y por peso.
+                    VStack(alignment: .trailing, spacing: 4) {
+                        ForEach(Array(ing.costBreakdown.enumerated()), id: \.offset) { i, cost in
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text(Money.format(cost.amount))
+                                    .font(Theme.rounded(i == 0 ? 16 : 13, i == 0 ? .heavy : .semibold))
+                                    .foregroundStyle(i == 0 ? Theme.ink : Theme.muted)
+                                Text("por \(cost.unit)")
+                                    .font(Theme.rounded(11))
+                                    .foregroundStyle(Theme.muted)
+                            }
+                        }
                     }
                 }
                 .padding(14)
@@ -62,6 +78,42 @@ struct IngredientsView: View {
         .sheet(isPresented: $creating) { IngredientEditor(ingredient: nil) }
         .sheet(item: $editing) { IngredientEditor(ingredient: $0) }
     }
+
+    /// Las pestañas de categoría, con cuántos hay de cada una.
+    ///
+    /// El número al lado importa más de lo que parece: dice si vale la pena
+    /// entrar sin tener que entrar. Tocar la que ya está puesta la quita.
+    private var kindFilters: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(IngredientKind.allCases, id: \.self) { k in
+                    let n = store.ingredients.filter { $0.kind == k }.count
+                    Button {
+                        UISelectionFeedbackGenerator().selectionChanged()
+                        kindFilter = kindFilter == k ? nil : k
+                    } label: {
+                        HStack(spacing: 5) {
+                            Text("\(k.emoji) \(k.label)")
+                                .font(Theme.rounded(13, .bold))
+                            Text("\(n)")
+                                .font(Theme.rounded(12, .semibold))
+                                .opacity(0.6)
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 9)
+                        .background(kindFilter == k ? Theme.green : Theme.card,
+                                    in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                        .foregroundStyle(kindFilter == k ? .white : Theme.muted)
+                        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+                            .stroke(kindFilter == k ? .clear : Theme.line, lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+        .animation(.snappy(duration: 0.2), value: kindFilter)
+    }
 }
 
 struct IngredientEditor: View {
@@ -75,6 +127,10 @@ struct IngredientEditor: View {
     @State private var quantity = ""
     @State private var unitSingle = "g"
     @State private var price = ""
+    /// Cuánto pesa una pieza. Opcional, y sólo tiene sentido para lo que se
+    /// cuenta: una caja de barras de mantequilla, una mata de bananas.
+    @State private var unitWeight = ""
+    @State private var unitWeightUnit = "g"
     @State private var loaded = false
 
     // Datos nutricionales: texto mientras se edita, para poder distinguir
@@ -120,6 +176,10 @@ struct IngredientEditor: View {
 
             MoneyField(label: "¿Cuánto te costó?", value: $price)
 
+            if Units.family(unitSingle) == .conteo { pieceWeightField }
+
+            costPreview
+
             macrosSection
 
             Text("Ejemplo: compras una bolsa de harina de 5 libras por $6.50 → escribes “bolsa”, 5 y eliges “libras”. Después en tus recetas puedes usar gramos: la cuenta se hace sola.")
@@ -159,6 +219,87 @@ struct IngredientEditor: View {
         }
     }
 
+    // MARK: - Cuánto pesa cada uno
+
+    /// Una caja de 24 barras de mantequilla son 24 unidades, y cada barra
+    /// 113 g. Con ese dato el precio se puede dar por barra Y por gramo, y una
+    /// receta puede pedir 200 g aunque la compra se haga por piezas.
+    private var pieceWeightField: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Text("¿Cuánto pesa cada uno?")
+                    .font(Theme.rounded(12, .bold)).foregroundStyle(Theme.muted)
+                Text("OPCIONAL")
+                    .font(Theme.rounded(9, .heavy))
+                    .foregroundStyle(Theme.muted)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color(hex: 0xF0E9E1), in: Capsule())
+            }
+            HStack(spacing: 8) {
+                TextField("ej. 113", text: $unitWeight)
+                    .keyboardType(.decimalPad)
+                    .font(Theme.rounded(15))
+                    .padding(.horizontal, 12)
+                    .frame(height: 46)
+                    .background(Color.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Theme.line, lineWidth: 1))
+
+                Picker("Unidad", selection: $unitWeightUnit) {
+                    // Sólo peso y volumen: "cada unidad pesa 3 unidades" no
+                    // dice nada.
+                    ForEach(Units.all.filter { $0.family != .conteo }, id: \.key) { u in
+                        Text(u.name).tag(u.key)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(Theme.green)
+                .padding(.horizontal, 12)
+                .frame(height: 46)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(Theme.line, lineWidth: 1))
+            }
+            Text("Así te digo el precio por pieza y por peso, y puedes cocinar en gramos.")
+                .font(Theme.rounded(11))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// El ingrediente tal como está el formulario ahora mismo, para poder
+    /// enseñar el precio antes de guardar.
+    private var draft: Ingredient {
+        var i = Ingredient(name: name, unit: unit,
+                           quantity: Quantity.parse(quantity),
+                           price: Double(price.replacingOccurrences(of: ",", with: ".")) ?? 0,
+                           unitSingle: unitSingle)
+        if let w = Double(unitWeight.replacingOccurrences(of: ",", with: ".")), w > 0 {
+            i.unitWeight = w
+            i.unitWeightUnit = unitWeightUnit
+        }
+        return i
+    }
+
+    @ViewBuilder
+    private var costPreview: some View {
+        let d = draft
+        if d.quantity > 0 && d.price > 0 {
+            HStack(spacing: 10) {
+                Text("Te sale a")
+                    .font(Theme.rounded(12))
+                    .foregroundStyle(Theme.muted)
+                ForEach(Array(d.costBreakdown.enumerated()), id: \.offset) { _, c in
+                    Text("\(Money.format(c.amount)) por \(c.unit)")
+                        .font(Theme.rounded(14, .bold))
+                        .foregroundStyle(Theme.ink)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
     // MARK: - Información nutricional (opcional)
 
     /// Cerrado por defecto: es opcional y la mayoría de las recetas funcionan
@@ -187,6 +328,15 @@ struct IngredientEditor: View {
                         .secondaryActionStyle()
                         .disabled(scanning)
                     }
+
+                    // Una banana no trae etiqueta pegada, así que para fruta y
+                    // verdura no hace falta foto ninguna: basta el nombre.
+                    Button { Task { await lookUpNutrition() } } label: {
+                        Label("Es fruta o verdura", systemImage: "leaf")
+                            .font(Theme.rounded(13, .semibold))
+                    }
+                    .secondaryActionStyle()
+                    .disabled(scanning || name.trimmingCharacters(in: .whitespaces).isEmpty)
                     HStack(spacing: 6) {
                         if scanning { ProgressView().controlSize(.small) }
                         Text(scanStatus)
@@ -267,6 +417,47 @@ struct IngredientEditor: View {
     /// La regla vive en el núcleo, que es donde se compara contra la web.
     private var macroBasis: String { MacroBasis.of(unitSingle).label }
 
+    /// Rellena los macros de una fruta o verdura a partir del nombre.
+    ///
+    /// Si el modelo sabe cuánto pesa una pieza y ella no lo había escrito, se
+    /// aprovecha: es el dato que hace falta para poder cocinar en gramos algo
+    /// que se compra por unidades.
+    private func lookUpNutrition() async {
+        let nombre = name.trimmingCharacters(in: .whitespaces)
+        guard !nombre.isEmpty else { return }
+        scanning = true
+        scanStatus = "Buscando los datos de \(nombre)…"
+        defer { scanning = false }
+
+        let propio = draft.pieceWeight.map { $0.base } ?? 0
+        let r = await store.referenceNutrition(name: nombre, unitSingle: unitSingle,
+                                               gramsPerPiece: propio)
+
+        if let g = r.gramosPorPieza, g > 0, unitWeight.isEmpty,
+           Units.family(unitSingle) == .conteo {
+            unitWeight = Quantity.pretty(g)
+            unitWeightUnit = "g"
+        }
+
+        guard r.ok else {
+            scanStatus = r.mensaje ?? "No pude buscarlo."
+            return
+        }
+
+        var puestos = 0
+        for m in Macro.allCases {
+            guard let v = r.macros[m.rawValue] ?? nil,
+                  let visto = MacroBasis.toShow(v, unitSingle: unitSingle) else { continue }
+            macros[m] = Quantity.pretty(visto)
+            puestos += 1
+        }
+        if r.esFruta { kind = .fruta }
+        scanStatus = puestos > 0
+            ? "Listo: \(puestos) datos de \(r.nombre ?? nombre)."
+              + (r.confianza == "baja" ? " Revísalos, no estoy seguro." : " Revisa que estén bien.")
+            : "No encontré datos."
+    }
+
     private func scanPicked(_ item: PhotosPickerItem?) async {
         guard let item,
               let data = try? await item.loadTransferable(type: Data.self),
@@ -321,6 +512,10 @@ struct IngredientEditor: View {
             quantity = Quantity.pretty(i.quantity)
             unitSingle = i.unitSingle
             price = i.price > 0 ? String(format: "%.2f", i.price) : ""
+            if let w = i.pieceWeight {
+                unitWeight = Quantity.pretty(w.amount)
+                unitWeightUnit = w.unit
+            }
             for m in Macro.allCases {
                 if let v = i.macro(m),
                    let visto = MacroBasis.toShow(v, unitSingle: i.unitSingle) {
@@ -340,6 +535,11 @@ struct IngredientEditor: View {
         record.quantity = Quantity.parse(quantity)
         record.unitSingle = unitSingle
         record.price = Double(price.replacingOccurrences(of: ",", with: ".")) ?? 0
+        // Vacío o cero significa "no lo sé", y entonces el campo se borra: si
+        // no, un peso viejo seguiría convirtiendo recetas a espaldas de ella.
+        let peso = Double(unitWeight.replacingOccurrences(of: ",", with: ".")) ?? 0
+        record.unitWeight = peso > 0 ? peso : 0
+        record.unitWeightUnit = unitWeightUnit
         // Un campo vacío es "no se sabe" (nil), no cero.
         for m in Macro.allCases {
             let raw = (macros[m] ?? "").trimmingCharacters(in: .whitespaces)

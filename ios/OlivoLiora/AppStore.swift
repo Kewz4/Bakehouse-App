@@ -81,6 +81,17 @@ final class AppStore {
     var sales: [Sale] { allSales.filter { Analytics.inRange($0.date, range) } }
     var expenses: [Expense] { allExpenses.filter { Analytics.inRange($0.date, range) } }
 
+    /// Cuánto suma un gasto dentro del período que se está mirando. Para un
+    /// recurrente es su monto por las veces que cae dentro.
+    func amountInPeriod(_ e: Expense) -> Double {
+        Investment.amount(of: e, from: range.lowerBound, to: range.upperBound)
+    }
+
+    func occurrencesInPeriod(_ e: Expense) -> Int {
+        guard e.kind == .recurrente else { return 1 }
+        return Investment.occurrences(of: e, from: range.lowerBound, to: range.upperBound)
+    }
+
     var metrics: Metrics { Analytics.metrics(doc: doc, range: range) }
     var topProducts: [TopProduct] { Analytics.topProducts(doc: doc, range: range) }
     var monthlyBars: [MonthBar] { Analytics.monthlyBars(doc: doc) }
@@ -307,6 +318,18 @@ final class AppStore {
 
     private func checkVision() async {
         visionEnabled = await client.visionEnabled()
+    }
+
+    /// Busca los datos de una fruta o verdura por su nombre.
+    func referenceNutrition(name: String, unitSingle: String,
+                            gramsPerPiece: Double) async -> SyncClient.Reference {
+        do {
+            return try await client.referenceNutrition(name: name, unitSingle: unitSingle,
+                                                       gramsPerPiece: gramsPerPiece)
+        } catch {
+            return SyncClient.Reference(
+                ok: false, mensaje: "No pude buscarlo ahora. Puedes escribir los datos a mano.")
+        }
     }
 
     func scanLabel(dataURL: String, packageQty: Double, packageUnit: String) async -> SyncClient.LabelScan {
