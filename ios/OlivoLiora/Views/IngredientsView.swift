@@ -81,7 +81,7 @@ struct IngredientEditor: View {
     // "vacío" (no se sabe) de "0" (sí se sabe, y es cero).
     @State private var macros: [Macro: String] = [:]
     /// Marcar fruta cambia qué etiqueta de azúcar sale en las recetas.
-    @State private var isFruit = false
+    @State private var kind: IngredientKind = .ingrediente
     @State private var showMacros = false
     @State private var scanStatus = "Toma una foto de la tabla nutricional y se llena solo."
     @State private var scanning = false
@@ -147,9 +147,10 @@ struct IngredientEditor: View {
             // Sólo se adivina mientras crea uno nuevo; si está editando, lo que
             // ella haya marcado se respeta.
             guard ingredient == nil else { return }
-            var probe = Ingredient(name: newName, unit: "", quantity: 1, price: 0, unitSingle: "g")
-            probe.setFruit(nil)
-            isFruit = probe.isFruit
+            // Sin categoría escrita, kind sale del nombre. Es lo que hace que
+            // al escribir "fresas" se marque fruta sola.
+            let probe = Ingredient(name: newName, unit: "", quantity: 1, price: 0, unitSingle: "g")
+            kind = probe.kind
         }
         .onChange(of: scanPick) { _, item in Task { await scanPicked(item) } }
         .sheet(isPresented: $showScanCamera) {
@@ -199,20 +200,19 @@ struct IngredientEditor: View {
                     .font(Theme.rounded(12, .bold))
                     .foregroundStyle(Theme.ink)
 
-                // La casilla manda sobre lo que se adivina por el nombre: una
-                // ralladura de limón se puede desmarcar, y una "pulpa" que no
-                // suena a fruta se puede marcar.
-                Toggle(isOn: $isFruit) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Es una fruta")
-                            .font(Theme.rounded(14, .bold))
-                            .foregroundStyle(Theme.ink)
-                        Text("La fruta lleva azúcar natural (fructosa), así que las recetas con fruta salen como “bajo en azúcar” y no como “sin azúcar”.")
-                            .font(Theme.rounded(11))
-                            .foregroundStyle(Theme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
+                // Lo que ella elija manda sobre lo que se adivina por el
+                // nombre: una ralladura de limón se puede sacar de "fruta", y
+                // una "pulpa" que no suena a nada se puede meter.
+                //
+                // El empaque no es un detalle de organización: una caja cuesta
+                // dinero pero no se come, así que no aporta macros ni impide
+                // que la receta consiga sus etiquetas de dieta.
+                Picker("Qué es", selection: $kind) {
+                    ForEach(IngredientKind.allCases, id: \.self) { k in
+                        Text("\(k.emoji) \(k.label)").tag(k)
                     }
                 }
+                .pickerStyle(.segmented)
                 .tint(Theme.green)
                 .padding(12)
                 .background(Color(hex: 0xFDF7EF), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
@@ -261,15 +261,11 @@ struct IngredientEditor: View {
             .stroke(Theme.line, lineWidth: 1))
     }
 
-    /// La etiqueta del producto viene por 100 g o por 100 ml, así que se sigue
-    /// la misma convención según cómo se mida el ingrediente.
-    private var macroBasis: String {
-        switch Units.family(unitSingle) {
-        case .volumen: return "100 ml"
-        case .conteo:  return "100 unidades"
-        case .masa:    return "100 g"
-        }
-    }
+    /// Sobre qué cantidad se leen los macros. Para lo que se pesa son 100 g o
+    /// 100 ml, como en las etiquetas. Para lo que se cuenta es UNA pieza: los
+    /// datos de una banana se dicen por banana, no por cien bananas.
+    /// La regla vive en el núcleo, que es donde se compara contra la web.
+    private var macroBasis: String { MacroBasis.of(unitSingle).label }
 
     private func scanPicked(_ item: PhotosPickerItem?) async {
         guard let item,
@@ -326,10 +322,13 @@ struct IngredientEditor: View {
             unitSingle = i.unitSingle
             price = i.price > 0 ? String(format: "%.2f", i.price) : ""
             for m in Macro.allCases {
-                if let v = i.macro(m) { macros[m] = Quantity.pretty(v) }
+                if let v = i.macro(m),
+                   let visto = MacroBasis.toShow(v, unitSingle: i.unitSingle) {
+                    macros[m] = Quantity.pretty(visto)
+                }
             }
             showMacros = i.hasMacros
-            isFruit = i.isFruit
+            kind = i.kind
         }
     }
 
@@ -345,9 +344,10 @@ struct IngredientEditor: View {
         for m in Macro.allCases {
             let raw = (macros[m] ?? "").trimmingCharacters(in: .whitespaces)
                 .replacingOccurrences(of: ",", with: ".")
-            record.setMacro(m, raw.isEmpty ? nil : Double(raw))
+            record.setMacro(m, raw.isEmpty ? nil
+                : MacroBasis.toStore(Double(raw), unitSingle: unitSingle))
         }
-        record.setFruit(isFruit)
+        record.setKind(kind)
         store.save(record)
         dismiss()
     }
