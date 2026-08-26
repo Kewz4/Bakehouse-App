@@ -29,6 +29,58 @@ const quantities = [
 
 const prettyInputs = [0, 0.125, 0.25, 1/3, 0.5, 2/3, 0.75, 1, 1.25, 1.5, 2, 2.75, 3.5, 12, 0.3, 1.07];
 
+// Casos que SUBEN de unidad porque en la suya el precio se leería "$0.00".
+// Es justo lo que él reportó ("me da el costo por onza") y no tenía ni una
+// prueba de conformidad: ninguno de los ingredientes de arriba escala.
+const escalan = [
+  { name: 'Harina fina',  quantity: 459,  price: 1.25, unitSingle: 'g' },   // métrico -> kg
+  { name: 'Sal',          quantity: 100,  price: 0.5,  unitSingle: 'oz' },  // imperial
+  { name: 'Agua',         quantity: 3000, price: 2,    unitSingle: 'ml' },  // métrico -> L
+  { name: 'Caldo',        quantity: 50,   price: 1.2,  unitSingle: 'cda' }, // casero
+  { name: 'Arroz',        quantity: 2000, price: 3.4,  unitSingle: 'g' }
+];
+
+// Ingredientes que además dicen cuánto pesa una pieza. Es lo que permite
+// comprar por cajas y cocinar por gramos.
+const conPeso = [
+  { name: 'Mantequilla', quantity: 7,   price: 7,    unitSingle: 'u', unitWeight: 113, unitWeightUnit: 'g' },
+  { name: 'Banana',      quantity: 12,  price: 3,    unitSingle: 'u', unitWeight: 118, unitWeightUnit: 'g' },
+  { name: 'Huevo',       quantity: 1,   price: 0.25, unitSingle: 'u', unitWeight: 50,  unitWeightUnit: 'g' },
+  { name: 'Leche',       quantity: 1,   price: 1.15, unitSingle: 'l' },     // sin peso por pieza
+  { name: 'Queso',       quantity: 500, price: 6,    unitSingle: 'g', unitWeight: 30, unitWeightUnit: 'g' },
+  { name: 'Roto',        quantity: 5,   price: 2,    unitSingle: 'u', unitWeight: 0,  unitWeightUnit: 'g' },
+  { name: 'Absurdo',     quantity: 5,   price: 2,    unitSingle: 'u', unitWeight: 3,  unitWeightUnit: 'u' }
+];
+
+// Conversiones que tiene que resolver una línea de receta.
+const conversiones = [
+  { ing: conPeso[0], unit: 'g',    qty: 200 },   // barras -> gramos
+  { ing: conPeso[0], unit: 'u',    qty: 2 },     // su propia unidad: sin conversión
+  { ing: conPeso[0], unit: 'kg',   qty: 1 },
+  { ing: conPeso[1], unit: 'g',    qty: 100 },
+  { ing: conPeso[3], unit: 'cda',  qty: 2 },     // litros -> cucharadas
+  { ing: conPeso[3], unit: 'taza', qty: 1 },
+  { ing: conPeso[3], unit: 'u',    qty: 1 },     // sin peso por pieza: imposible
+  { ing: conPeso[4], unit: 'u',    qty: 3 },     // gramos -> piezas
+  { ing: conPeso[5], unit: 'g',    qty: 50 },    // peso por pieza inválido
+  { ing: conPeso[6], unit: 'g',    qty: 50 }     // "cada unidad pesa 3 unidades"
+];
+
+// De qué se habla cuando se habla de macros: por 100 g, o por pieza.
+const basesMacro = ['g', 'kg', 'ml', 'l', 'u', 'docena', 'taza', 'lb'];
+
+const categorias = [
+  { name: 'Harina',   kind: 'ingrediente' },
+  { name: 'Banana',   kind: 'fruta' },
+  { name: 'Caja',     kind: 'empaque' },
+  { name: 'Fresa' },                              // por el nombre
+  { name: 'Harina' },                             // por el nombre, no es fruta
+  { name: 'Mora',     fruta: false },             // lo que ella decidió manda
+  { name: 'Cosa',     fruta: true },
+  { name: 'Coco' },                               // a propósito NO es fruta
+  { name: 'Vaso',     kind: 'empaque', fruta: true }  // la categoría manda
+];
+
 const ingredients = [
   { name: 'Harina',  quantity: 5,   price: 6.5,  unitSingle: 'lb' },
   { name: 'Azúcar',  quantity: 2,   price: 3,    unitSingle: 'kg' },
@@ -191,6 +243,30 @@ const out = {
     out: B.countLabel(c.shown, c.total, c.singular, c.plural)
   })),
   joinDetail: joinCases.map(parts => ({ in: parts, out: B.joinDetail(parts) })),
+  displayCostEscala: escalan.map(i => {
+    const d = B.displayCost(i);
+    return { in: i, amount: d.amount, unit: d.unit };
+  }),
+  costBreakdown: conPeso.map(i => ({
+    in: i,
+    salidas: B.costBreakdown(i).map(c => ({ amount: c.amount, unit: c.unit }))
+  })),
+  unitFactor: conversiones.map(c => {
+    const f = B.unitFactor(c.ing, c.unit);
+    const info = B.conversionInfo(c.ing, c.unit, c.qty);
+    return {
+      in: { ing: c.ing, unit: c.unit, qty: c.qty },
+      factor: f ? f.factor : null,
+      via: f ? f.via : null,
+      lineCost: B.lineUnitCost(c.ing, c.unit),
+      texto: info ? info.texto : null
+    };
+  }),
+  macroBasis: basesMacro.map(u => {
+    const b = B.macroBasis(u);
+    return { in: u, amount: b.amount, unit: b.unit, etiqueta: b.etiqueta, factor: b.factor };
+  }),
+  kindOf: categorias.map(i => ({ in: i, kind: B.kindOf(i), fruta: B.esFruta(i) })),
   recipe: recipes.map(r => ({
     in: r,
     totalCost: B.recipeCost(r),
@@ -204,5 +280,7 @@ fs.writeFileSync(OUT, JSON.stringify(out, null, 2) + '\n');
 console.log('parseQty:%d prettyQty:%d baseCost:%d recipe:%d macroRecipes:%d -> %s',
   out.parseQty.length, out.prettyQty.length, out.baseCost.length, out.recipe.length,
   out.macroRecipes.length, path.relative(process.cwd(), OUT));
-console.log('badgeRecipes:%d countLabel:%d joinDetail:%d',
-  out.badgeRecipes.length, out.countLabel.length, out.joinDetail.length);
+console.log('badgeRecipes:%d countLabel:%d joinDetail:%d', out.badgeRecipes.length, out.countLabel.length, out.joinDetail.length);
+console.log('escala:%d costBreakdown:%d unitFactor:%d macroBasis:%d kindOf:%d',
+  out.displayCostEscala.length, out.costBreakdown.length, out.unitFactor.length,
+  out.macroBasis.length, out.kindOf.length);

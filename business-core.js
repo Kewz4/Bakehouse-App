@@ -27,17 +27,19 @@
 // Unidades: cada una guarda a cuánto equivale en la unidad base de su familia
 // (masa → gramos, volumen → mililitros, conteo → unidades).
 const UNITS={
- g:{f:1,fam:'masa',n:'gramos (g)',s:'g'},
- kg:{f:1000,fam:'masa',n:'kilos (kg)',s:'kg'},
- lb:{f:453.592,fam:'masa',n:'libras (lb)',s:'lb'},
- oz:{f:28.3495,fam:'masa',n:'onzas (oz)',s:'oz'},
- ml:{f:1,fam:'volumen',n:'mililitros (ml)',s:'ml'},
- l:{f:1000,fam:'volumen',n:'litros (L)',s:'L'},
- taza:{f:240,fam:'volumen',n:'tazas',s:'taza'},
- cda:{f:15,fam:'volumen',n:'cucharadas',s:'cda'},
- cdta:{f:5,fam:'volumen',n:'cucharaditas',s:'cdta'},
- u:{f:1,fam:'conteo',n:'unidades',s:'u'},
- docena:{f:12,fam:'conteo',n:'docenas',s:'docena'}};
+ g:{f:1,fam:'masa',n:'gramos (g)',s:'g',sys:'metrico'},
+ kg:{f:1000,fam:'masa',n:'kilos (kg)',s:'kg',sys:'metrico'},
+ lb:{f:453.592,fam:'masa',n:'libras (lb)',s:'lb',sys:'imperial'},
+ oz:{f:28.3495,fam:'masa',n:'onzas (oz)',s:'oz',sys:'imperial'},
+ ml:{f:1,fam:'volumen',n:'mililitros (ml)',s:'ml',sys:'metrico'},
+ l:{f:1000,fam:'volumen',n:'litros (L)',s:'L',sys:'metrico'},
+ taza:{f:240,fam:'volumen',n:'tazas',s:'taza',sys:'casero'},
+ cda:{f:15,fam:'volumen',n:'cucharadas',s:'cda',sys:'casero'},
+ cdta:{f:5,fam:'volumen',n:'cucharaditas',s:'cdta',sys:'casero'},
+ u:{f:1,fam:'conteo',n:'unidades',s:'u',sys:'conteo'},
+ docena:{f:12,fam:'conteo',n:'docenas',s:'docena',sys:'conteo'}};
+/** La unidad de referencia de una familia: el gramo, el mililitro, la unidad. */
+const baseUnit=fam=>Object.values(UNITS).find(u=>u.fam===fam&&u.f===1)||UNITS.u;
 const unitInfo=k=>UNITS[k]||UNITS.u;
 // Acepta "1/2", "1 1/2", "½", "media taza", "un cuarto", "2.5"…
 const FRACCIONES={'½':.5,'⅓':1/3,'⅔':2/3,'¼':.25,'¾':.75,'⅛':.125,'⅜':.375,'⅝':.625,'⅞':.875,'⅕':.2,'⅖':.4,'⅗':.6,'⅘':.8,'⅙':1/6,'⅚':5/6};
@@ -87,16 +89,168 @@ function baseCost(ing){const q=(+ing.quantity||1)*unitInfo(ing.unitSingle).f;ret
 const COST_READABLE=0.01;   // por debajo de esto se ve como "$0.00"
 const COST_MIN=0.10;        // al subir de unidad, se busca al menos esto
 function displayCost(ing){
- const porBase=baseCost(ing);
- const propia=unitInfo(ing.unitSingle);
- // Su unidad, si se lee bien.
- if(porBase*propia.f>=COST_READABLE)return {amount:porBase*propia.f,unit:propia.s};
- const fam=unitFamily(ing.unitSingle);
- const opciones=Object.entries(UNITS).filter(([k,v])=>v.fam===fam)
-   .sort((a,b)=>a[1].f-b[1].f);
- if(!opciones.length)return {amount:porBase*propia.f,unit:propia.s};
- const elegida=opciones.find(([k,v])=>porBase*v.f>=COST_MIN)||opciones[opciones.length-1];
+ return legible(baseCost(ing),unitFamily((ing&&ing.unitSingle)||'g'),(ing&&ing.unitSingle)||'g')}
+
+/**
+ * Elige la unidad en la que un precio se puede leer.
+ *
+ * Manda la unidad que ELLA eligió. Sólo se cambia cuando su unidad daría
+ * "$0.00" —una harina de $1.25 la bolsa de 459 g sale a $0.0027 el gramo, y a
+ * dos decimales eso es cero—, y aun entonces se busca dentro de su mismo
+ * sistema de medida: quien compra en gramos quiere ver kilos, no onzas.
+ */
+function legible(porBase,fam,preferida){
+ const pref=unitInfo(preferida);
+ const propio=pref.fam===fam?pref.f:1;
+ if(porBase*propio>=COST_READABLE)return {amount:porBase*propio,unit:pref.fam===fam?pref.s:baseUnit(fam).s};
+
+ const todas=Object.entries(UNITS).filter(([k,v])=>v.fam===fam).sort((a,b)=>a[1].f-b[1].f);
+ const mismoSistema=todas.filter(([k,v])=>v.sys===pref.sys);
+ const busca=lista=>lista.find(([k,v])=>porBase*v.f>=COST_MIN);
+ const elegida=busca(mismoSistema)||busca(todas)||todas[todas.length-1];
+ if(!elegida)return {amount:porBase*propio,unit:pref.s};
  return {amount:porBase*elegida[1].f,unit:elegida[1].s}}
+
+// ---------------------------------------------------------------------------
+// Qué clase de cosa es
+// ---------------------------------------------------------------------------
+// El empaque no se come pero cuesta dinero, y es un gasto tan recurrente como
+// la harina: va en la misma lista, con su propia categoría. Eso tiene una
+// consecuencia que hay que tratar aparte — una caja no tiene macros, y sin esto
+// una receta con caja no conseguiría nunca una etiqueta de dieta, porque le
+// faltaría "un ingrediente por cubrir".
+const KINDS=[
+ {k:'ingrediente',n:'Ingrediente',emoji:'🥣'},
+ {k:'fruta',      n:'Fruta y verdura',emoji:'🍎'},
+ {k:'empaque',    n:'Empaque',emoji:'📦'}];
+const KIND_KEYS=KINDS.map(k=>k.k);
+
+function kindOf(ing){
+ if(!ing)return 'ingrediente';
+ if(KIND_KEYS.includes(ing.kind))return ing.kind;
+ // Antes esto era un interruptor de sí/no para la fruta. Lo que ella marcó
+ // entonces sigue mandando sobre la detección por nombre.
+ if(ing.fruta===true)return 'fruta';
+ if(ing.fruta===false)return 'ingrediente';
+ return nombreEsFruta(ing.name)?'fruta':'ingrediente'}
+
+/** El empaque cuesta, pero no alimenta: no cuenta ni suma ni resta macros. */
+const aportaMacros=ing=>kindOf(ing)!=='empaque';
+
+// ---------------------------------------------------------------------------
+// Cuánto pesa una pieza
+// ---------------------------------------------------------------------------
+// Una caja de 24 barras de mantequilla son 24 unidades, y además cada barra
+// pesa 113 g. Con ese dato salen dos cosas: el costo se puede dar por barra Y
+// por gramo, y una receta puede pedir 200 g de mantequilla aunque la compra se
+// haga por barras. Es opcional: sin él todo sigue funcionando como antes.
+function unitWeight(ing){
+ if(!ing)return null;
+ const n=+ing.unitWeight;
+ if(!isFinite(n)||n<=0)return null;
+ const clave=ing.unitWeightUnit||'g';
+ const u=unitInfo(clave);
+ // "cada unidad pesa 3 unidades" no dice nada; hace falta peso o volumen.
+ if(u.fam==='conteo')return null;
+ return {amount:n,unit:clave,short:u.s,base:n*u.f,fam:u.fam}}
+
+/**
+ * Cuántas unidades base del ingrediente vale UNA de `lineUnit`.
+ *
+ * Es lo que convierte "dos cucharadas" en un costo cuando la leche se compró
+ * por litros, y "200 g" en un costo cuando la mantequilla se compró por barras.
+ * Devuelve null cuando la conversión no se puede hacer sin inventarse un dato:
+ * de mililitros a gramos hace falta la densidad, y adivinarla daría un número
+ * tan convincente como equivocado.
+ */
+function unitFactor(ing,lineUnit){
+ const propiaKey=(ing&&ing.unitSingle)||'g';
+ const propia=unitFamily(propiaKey);
+ const li=unitInfo(lineUnit);
+ if(li.fam===propia)return {factor:li.f,via:lineUnit===propiaKey?null:'misma-familia'};
+ const w=unitWeight(ing);
+ if(!w)return null;
+ // Se compra por piezas y la receta pide peso o volumen.
+ if(propia==='conteo'&&li.fam===w.fam)return {factor:li.f/w.base,via:'pieza'};
+ // Se compra por peso o volumen y la receta pide piezas.
+ if(li.fam==='conteo'&&propia===w.fam)return {factor:li.f*w.base,via:'pieza'};
+ return null}
+
+/** Lo que cuesta una unidad de `lineUnit` de este ingrediente. */
+function lineUnitCost(ing,lineUnit){
+ const f=unitFactor(ing,lineUnit);
+ return f?baseCost(ing)*f.factor:null}
+
+/**
+ * Qué se convirtió, en palabras, para poder explicárselo a quien lo lea.
+ * Devuelve null cuando no hubo conversión ninguna.
+ */
+function conversionInfo(ing,lineUnit,qty){
+ const f=unitFactor(ing,lineUnit);
+ if(!f||!f.via)return null;
+ const n=+qty||0;
+ const propiaKey=(ing&&ing.unitSingle)||'g';
+ const propia=unitInfo(propiaKey);
+ // El factor lleva a unidades BASE, así que la equivalencia se dice en la
+ // unidad base de la familia: "30 ml", no "30 L".
+ const base=baseUnit(unitFamily(propiaKey));
+ const equivale=n*f.factor;
+ const w=unitWeight(ing);
+ return {via:f.via,
+  texto:prettyQty(n)+' '+unitInfo(lineUnit).s+' = '+prettyQty(+equivale.toFixed(3))+' '+base.s,
+  detalle:f.via==='pieza'&&w
+   ? 'Compras '+(ing.name||'esto')+' por '+propia.n+', y cada una pesa '+prettyQty(w.amount)+' '+w.short+'. Con eso la cuenta sale sola.'
+   : 'Compras '+(ing.name||'esto')+' por '+propia.n+'. Son la misma medida, así que la equivalencia es exacta.'}}
+
+/**
+ * A cuánto sale, en las formas que se pueden leer de un vistazo.
+ *
+ * Siempre la unidad en que se compra. Y además, cuando se sabe cuánto pesa una
+ * pieza, el precio por peso: una caja de 7 barras a $7 son $1 la barra, y si
+ * cada barra trae 113 g, también $0.0088 el gramo — que es el número que hace
+ * falta cuando la receta pide gramos.
+ */
+function costBreakdown(ing){
+ const salidas=[displayCost(ing)];
+ const w=unitWeight(ing);
+ if(!w)return salidas;
+ const propia=unitFamily((ing&&ing.unitSingle)||'g');
+ // Sólo tiene sentido enseñar la otra cara: si se compra por piezas, el peso;
+ // si se compra por peso, la pieza.
+ const otra=propia==='conteo'?w.fam:'conteo';
+ const porBase=baseCost(ing);
+ if(propia==='conteo'){
+  const porUnidadDePeso=porBase/w.base;      // $ por gramo o por ml
+  salidas.push(legible(porUnidadDePeso,w.fam,w.unit));
+ }else if(propia===w.fam){
+  salidas.push({amount:porBase*w.base,unit:'unidad'});
+ }
+ return salidas}
+
+// ---------------------------------------------------------------------------
+// Sobre qué cantidad se leen los macros
+// ---------------------------------------------------------------------------
+// Las etiquetas vienen por 100 g o por 100 ml, y así se guardan. Pero "por cada
+// 100 unidades" no lo lee nadie: los datos de una banana se dicen POR BANANA,
+// no por cien bananas. Se sigue guardando igual —por 100 unidades base, para
+// que las cuentas de receta no cambien— y se enseña por pieza.
+function macroBasis(unitSingle){
+ const fam=unitFamily(unitSingle||'g');
+ if(fam==='conteo')return {amount:1,unit:'unidad',etiqueta:'cada unidad',factor:100};
+ const u=unitInfo(unitSingle);
+ return {amount:100,unit:u.s,etiqueta:'100 '+u.s,factor:1}}
+
+/** De lo que ella escribe a lo que se guarda. */
+function macroToStore(valor,unitSingle){
+ const n=+valor;
+ if(valor==null||valor===''||!isFinite(n))return null;
+ return +(n*macroBasis(unitSingle).factor).toFixed(4)}
+
+/** De lo guardado a lo que se enseña. */
+function macroToShow(valor,unitSingle){
+ const n=+valor;
+ if(valor==null||valor===''||!isFinite(n))return null;
+ return +(n/macroBasis(unitSingle).factor).toFixed(2)}
 
 function recipeCost(r){return (r.ingredients||[]).reduce((s,i)=>s+(+i.qty||0)*(+i.cost||0),0)}function recipePrice(r){return +r.price||0}function recipeUnitCost(r){return recipeCost(r)/(+r.yield||1)}function recipeMargin(r){const p=recipePrice(r);return p?(p-recipeUnitCost(r))/p*100:0}function suggestPrice(r,target=65){return recipeUnitCost(r)/(1-target/100)}
 
@@ -141,17 +295,28 @@ function recipeMacros(r,ingredientsById){
  const totals={};MACRO_KEYS.forEach(k=>totals[k]=0);
  const lines=(r&&r.ingredients)||[];
  let contadas=0;
- lines.forEach(l=>{
+ // El empaque queda fuera de la cuenta entera: no aporta nada y tampoco
+ // puede impedir que la receta consiga etiquetas por "faltarle un
+ // ingrediente", porque una caja no es un ingrediente.
+ const comestibles=lines.filter(l=>{
+  const ing=ingredientsById&&ingredientsById[l.ingredientId];
+  return !ing||aportaMacros(ing)});
+ comestibles.forEach(l=>{
   const ing=ingredientsById&&ingredientsById[l.ingredientId];
   if(!ing||!hasMacros(ing))return;
-  // cantidad de la línea llevada a unidades base
-  const base=(+l.qty||0)*unitInfo(l.unit||ing.unitSingle).f;
+  // La cantidad de la línea llevada a unidades base. Puede cruzar de contar a
+  // pesar cuando se sabe cuánto pesa una pieza (200 g de mantequilla que se
+  // compra por barras), y por eso no basta con el factor de la unidad.
+  const f=unitFactor(ing,l.unit||ing.unitSingle);
+  if(!f)return;
+  const base=(+l.qty||0)*f.factor;
   MACRO_KEYS.forEach(k=>{totals[k]+=base*macroPerBase(ing,k)});
   contadas++});
  const porciones=(+r.yield||1)||1;
  const perServing={};MACRO_KEYS.forEach(k=>perServing[k]=totals[k]/porciones);
  return {totals:totals, perServing:perServing,
-         contadas:contadas, total:lines.length, completo:contadas===lines.length&&lines.length>0};
+         contadas:contadas, total:comestibles.length,
+         completo:contadas===comestibles.length&&comestibles.length>0};
 }
 
 /**
@@ -243,11 +408,13 @@ const FRUTAS=['fresa','frambuesa','mora','zarzamora','arandano','arándano','blu
  'kiwi','papaya','sandia','sandía','melon','melón','maracuya','maracuyá','guayaba',
  'datil','dátil','higo','ciruela','granada','tamarindo','maranon','marañón','jocote',
  'mamey','zapote','anona','nispero','níspero','lichi','carambola','fruta'];
+function nombreEsFruta(nombre){
+ const n=String(nombre||'').toLowerCase();
+ return FRUTAS.some(f=>n.includes(f))}
+/** ¿Cuenta como fruta para las etiquetas de azúcar? */
 function esFruta(ing){
  if(!ing)return false;
- if(typeof ing.fruta==='boolean')return ing.fruta;      // lo que ella decidió
- const n=String(ing.name||'').toLowerCase();
- return FRUTAS.some(f=>n.includes(f))}
+ return kindOf(ing)==='fruta'}
 
 // Paleo NO se puede deducir de los macros: no es una cuestión de cantidades
 // sino de qué lleva la receta. Se mira por nombre de ingrediente, y por eso es
@@ -291,8 +458,13 @@ function recipeBadges(r,ingredientsById){
  //
  // Si algún ingrediente no declara la azúcar añadida no se pone ninguna de las
  // dos: es una afirmación sobre salud y no se hace a medias.
- const usadas=(r.ingredients||[]).map(l=>ingredientsById[l.ingredientId]).filter(Boolean);
- const sabemosAnadida=usadas.length===(r.ingredients||[]).length&&
+ // El empaque no se come: ni aporta azúcar ni puede impedir que se sepa
+ // cuánta lleva la receta.
+ const comestiblesL=(r.ingredients||[]).filter(l=>{
+  const ing=ingredientsById[l.ingredientId];
+  return !ing||aportaMacros(ing)});
+ const usadas=comestiblesL.map(l=>ingredientsById[l.ingredientId]).filter(Boolean);
+ const sabemosAnadida=usadas.length===comestiblesL.length&&comestiblesL.length>0&&
    usadas.every(i=>i.macros&&i.macros.azucarAnadida!=null&&isFinite(+i.macros.azucarAnadida));
  if(sabemosAnadida){
   const anadida=p.azucarAnadida;
@@ -304,8 +476,12 @@ function recipeBadges(r,ingredientsById){
     d:conFruta?'Sin azúcar añadida, pero lleva fruta (fructosa)':'Poca azúcar añadida: 5 g o menos por porción'})}}
 
  // Paleo se evalúa aparte, sobre los ingredientes de verdad.
- const usados=(r.ingredients||[]).map(l=>ingredientsById[l.ingredientId]).filter(Boolean);
- if(usados.length===(r.ingredients||[]).length&&esPaleo(usados)){
+ const usados=(r.ingredients||[]).map(l=>ingredientsById[l.ingredientId])
+   .filter(Boolean).filter(aportaMacros);
+ const comestibles=(r.ingredients||[]).filter(l=>{
+  const ing=ingredientsById[l.ingredientId];
+  return !ing||aportaMacros(ing)});
+ if(usados.length===comestibles.length&&esPaleo(usados)){
   out.push({k:'paleo',n:'Paleo',emoji:'🥥',d:'Sin harinas, lácteos ni azúcar añadida'})}
 
  return {badges:out,motivo:out.length?null:'ninguna',macros:m}}
@@ -349,6 +525,10 @@ return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS
         normalizarEtiqueta:normalizarEtiqueta,
         BADGES:BADGES, ALL_BADGES:ALL_BADGES,
         recipeBadges:recipeBadges, esPaleo:esPaleo,
-        esFruta:esFruta, FRUTAS:FRUTAS,
+        esFruta:esFruta, nombreEsFruta:nombreEsFruta, FRUTAS:FRUTAS,
+        KINDS:KINDS, KIND_KEYS:KIND_KEYS, kindOf:kindOf, aportaMacros:aportaMacros,
+        unitWeight:unitWeight, unitFactor:unitFactor, lineUnitCost:lineUnitCost,
+        conversionInfo:conversionInfo, costBreakdown:costBreakdown,
+        macroBasis:macroBasis, macroToStore:macroToStore, macroToShow:macroToShow,
         countLabel:countLabel, joinDetail:joinDetail};
 });

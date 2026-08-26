@@ -1009,6 +1009,492 @@
       "out": "Hoy · 1 gasto"
     }
   ],
+  "displayCostEscala": [
+    {
+      "in": {
+        "name": "Harina fina",
+        "quantity": 459,
+        "price": 1.25,
+        "unitSingle": "g"
+      },
+      "amount": 2.7233115468409586,
+      "unit": "kg"
+    },
+    {
+      "in": {
+        "name": "Sal",
+        "quantity": 100,
+        "price": 0.5,
+        "unitSingle": "oz"
+      },
+      "amount": 0.1763699536147022,
+      "unit": "kg"
+    },
+    {
+      "in": {
+        "name": "Agua",
+        "quantity": 3000,
+        "price": 2,
+        "unitSingle": "ml"
+      },
+      "amount": 0.6666666666666666,
+      "unit": "L"
+    },
+    {
+      "in": {
+        "name": "Caldo",
+        "quantity": 50,
+        "price": 1.2,
+        "unitSingle": "cda"
+      },
+      "amount": 0.023999999999999997,
+      "unit": "cda"
+    },
+    {
+      "in": {
+        "name": "Arroz",
+        "quantity": 2000,
+        "price": 3.4,
+        "unitSingle": "g"
+      },
+      "amount": 1.7,
+      "unit": "kg"
+    }
+  ],
+  "costBreakdown": [
+    {
+      "in": {
+        "name": "Mantequilla",
+        "quantity": 7,
+        "price": 7,
+        "unitSingle": "u",
+        "unitWeight": 113,
+        "unitWeightUnit": "g"
+      },
+      "salidas": [
+        {
+          "amount": 1,
+          "unit": "u"
+        },
+        {
+          "amount": 8.849557522123893,
+          "unit": "kg"
+        }
+      ]
+    },
+    {
+      "in": {
+        "name": "Banana",
+        "quantity": 12,
+        "price": 3,
+        "unitSingle": "u",
+        "unitWeight": 118,
+        "unitWeightUnit": "g"
+      },
+      "salidas": [
+        {
+          "amount": 0.25,
+          "unit": "u"
+        },
+        {
+          "amount": 2.1186440677966103,
+          "unit": "kg"
+        }
+      ]
+    },
+    {
+      "in": {
+        "name": "Huevo",
+        "quantity": 1,
+        "price": 0.25,
+        "unitSingle": "u",
+        "unitWeight": 50,
+        "unitWeightUnit": "g"
+      },
+      "salidas": [
+        {
+          "amount": 0.25,
+          "unit": "u"
+        },
+        {
+          "amount": 5,
+          "unit": "kg"
+        }
+      ]
+    },
+    {
+      "in": {
+        "name": "Leche",
+        "quantity": 1,
+        "price": 1.15,
+        "unitSingle": "l"
+      },
+      "salidas": [
+        {
+          "amount": 1.15,
+          "unit": "L"
+        }
+      ]
+    },
+    {
+      "in": {
+        "name": "Queso",
+        "quantity": 500,
+        "price": 6,
+        "unitSingle": "g",
+        "unitWeight": 30,
+        "unitWeightUnit": "g"
+      },
+      "salidas": [
+        {
+          "amount": 0.012,
+          "unit": "g"
+        },
+        {
+          "amount": 0.36,
+          "unit": "unidad"
+        }
+      ]
+    },
+    {
+      "in": {
+        "name": "Roto",
+        "quantity": 5,
+        "price": 2,
+        "unitSingle": "u",
+        "unitWeight": 0,
+        "unitWeightUnit": "g"
+      },
+      "salidas": [
+        {
+          "amount": 0.4,
+          "unit": "u"
+        }
+      ]
+    },
+    {
+      "in": {
+        "name": "Absurdo",
+        "quantity": 5,
+        "price": 2,
+        "unitSingle": "u",
+        "unitWeight": 3,
+        "unitWeightUnit": "u"
+      },
+      "salidas": [
+        {
+          "amount": 0.4,
+          "unit": "u"
+        }
+      ]
+    }
+  ],
+  "unitFactor": [
+    {
+      "in": {
+        "ing": {
+          "name": "Mantequilla",
+          "quantity": 7,
+          "price": 7,
+          "unitSingle": "u",
+          "unitWeight": 113,
+          "unitWeightUnit": "g"
+        },
+        "unit": "g",
+        "qty": 200
+      },
+      "factor": 0.008849557522123894,
+      "via": "pieza",
+      "lineCost": 0.008849557522123894,
+      "texto": "200 g = 1.77 u"
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Mantequilla",
+          "quantity": 7,
+          "price": 7,
+          "unitSingle": "u",
+          "unitWeight": 113,
+          "unitWeightUnit": "g"
+        },
+        "unit": "u",
+        "qty": 2
+      },
+      "factor": 1,
+      "via": null,
+      "lineCost": 1,
+      "texto": null
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Mantequilla",
+          "quantity": 7,
+          "price": 7,
+          "unitSingle": "u",
+          "unitWeight": 113,
+          "unitWeightUnit": "g"
+        },
+        "unit": "kg",
+        "qty": 1
+      },
+      "factor": 8.849557522123893,
+      "via": "pieza",
+      "lineCost": 8.849557522123893,
+      "texto": "1 kg = 8.85 u"
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Banana",
+          "quantity": 12,
+          "price": 3,
+          "unitSingle": "u",
+          "unitWeight": 118,
+          "unitWeightUnit": "g"
+        },
+        "unit": "g",
+        "qty": 100
+      },
+      "factor": 0.00847457627118644,
+      "via": "pieza",
+      "lineCost": 0.00211864406779661,
+      "texto": "100 g = 0.85 u"
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Leche",
+          "quantity": 1,
+          "price": 1.15,
+          "unitSingle": "l"
+        },
+        "unit": "cda",
+        "qty": 2
+      },
+      "factor": 15,
+      "via": "misma-familia",
+      "lineCost": 0.01725,
+      "texto": "2 cda = 30 ml"
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Leche",
+          "quantity": 1,
+          "price": 1.15,
+          "unitSingle": "l"
+        },
+        "unit": "taza",
+        "qty": 1
+      },
+      "factor": 240,
+      "via": "misma-familia",
+      "lineCost": 0.276,
+      "texto": "1 taza = 240 ml"
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Leche",
+          "quantity": 1,
+          "price": 1.15,
+          "unitSingle": "l"
+        },
+        "unit": "u",
+        "qty": 1
+      },
+      "factor": null,
+      "via": null,
+      "lineCost": null,
+      "texto": null
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Queso",
+          "quantity": 500,
+          "price": 6,
+          "unitSingle": "g",
+          "unitWeight": 30,
+          "unitWeightUnit": "g"
+        },
+        "unit": "u",
+        "qty": 3
+      },
+      "factor": 30,
+      "via": "pieza",
+      "lineCost": 0.36,
+      "texto": "3 u = 90 g"
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Roto",
+          "quantity": 5,
+          "price": 2,
+          "unitSingle": "u",
+          "unitWeight": 0,
+          "unitWeightUnit": "g"
+        },
+        "unit": "g",
+        "qty": 50
+      },
+      "factor": null,
+      "via": null,
+      "lineCost": null,
+      "texto": null
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Absurdo",
+          "quantity": 5,
+          "price": 2,
+          "unitSingle": "u",
+          "unitWeight": 3,
+          "unitWeightUnit": "u"
+        },
+        "unit": "g",
+        "qty": 50
+      },
+      "factor": null,
+      "via": null,
+      "lineCost": null,
+      "texto": null
+    }
+  ],
+  "macroBasis": [
+    {
+      "in": "g",
+      "amount": 100,
+      "unit": "g",
+      "etiqueta": "100 g",
+      "factor": 1
+    },
+    {
+      "in": "kg",
+      "amount": 100,
+      "unit": "kg",
+      "etiqueta": "100 kg",
+      "factor": 1
+    },
+    {
+      "in": "ml",
+      "amount": 100,
+      "unit": "ml",
+      "etiqueta": "100 ml",
+      "factor": 1
+    },
+    {
+      "in": "l",
+      "amount": 100,
+      "unit": "L",
+      "etiqueta": "100 L",
+      "factor": 1
+    },
+    {
+      "in": "u",
+      "amount": 1,
+      "unit": "unidad",
+      "etiqueta": "cada unidad",
+      "factor": 100
+    },
+    {
+      "in": "docena",
+      "amount": 1,
+      "unit": "unidad",
+      "etiqueta": "cada unidad",
+      "factor": 100
+    },
+    {
+      "in": "taza",
+      "amount": 100,
+      "unit": "taza",
+      "etiqueta": "100 taza",
+      "factor": 1
+    },
+    {
+      "in": "lb",
+      "amount": 100,
+      "unit": "lb",
+      "etiqueta": "100 lb",
+      "factor": 1
+    }
+  ],
+  "kindOf": [
+    {
+      "in": {
+        "name": "Harina",
+        "kind": "ingrediente"
+      },
+      "kind": "ingrediente",
+      "fruta": false
+    },
+    {
+      "in": {
+        "name": "Banana",
+        "kind": "fruta"
+      },
+      "kind": "fruta",
+      "fruta": true
+    },
+    {
+      "in": {
+        "name": "Caja",
+        "kind": "empaque"
+      },
+      "kind": "empaque",
+      "fruta": false
+    },
+    {
+      "in": {
+        "name": "Fresa"
+      },
+      "kind": "fruta",
+      "fruta": true
+    },
+    {
+      "in": {
+        "name": "Harina"
+      },
+      "kind": "ingrediente",
+      "fruta": false
+    },
+    {
+      "in": {
+        "name": "Mora",
+        "fruta": false
+      },
+      "kind": "ingrediente",
+      "fruta": false
+    },
+    {
+      "in": {
+        "name": "Cosa",
+        "fruta": true
+      },
+      "kind": "fruta",
+      "fruta": true
+    },
+    {
+      "in": {
+        "name": "Coco"
+      },
+      "kind": "ingrediente",
+      "fruta": false
+    },
+    {
+      "in": {
+        "name": "Vaso",
+        "kind": "empaque",
+        "fruta": true
+      },
+      "kind": "empaque",
+      "fruta": false
+    }
+  ],
   "recipe": [
     {
       "in": {

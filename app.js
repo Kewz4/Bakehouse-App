@@ -201,7 +201,9 @@ if(!pad||!pad.classList.contains('show'))return;
 if(pad.contains(e.target)||e.target===padTarget)return;
 if(e.target.dataset&&e.target.dataset.pad!=null)return;
 closePad()},true);
-function unitOptions(selected,family){return Object.entries(UNITS).filter(([k,v])=>!family||v.fam===family).map(([k,v])=>`<option value="${k}" ${k===selected?'selected':''}>${v.n}</option>`).join('')}
+function unitOptions(selected,family,excluir){return Object.entries(UNITS)
+ .filter(([k,v])=>(!family||v.fam===family)&&!(excluir||[]).includes(v.fam))
+ .map(([k,v])=>`<option value="${k}" ${k===selected?'selected':''}>${v.n}</option>`).join('')}
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate=d=>{if(!d)return '—';const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:d};
 let toastTimer;function toast(msg,isError){const t=$('#toast');t.textContent=msg;t.className='show'+(isError?' err':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='',isError?4200:2400)}
@@ -231,6 +233,16 @@ function badgeFilterRow(){
  * antetítulo que decía lo mismo con otras palabras ("Lo que compras" encima de
  * "Ingredientes"). Un recuento sí dice algo que el título no dice.
  */
+// Qué categoría se está mirando. Vacío = todas.
+let filtroKind='';
+function setKindFilter(k){filtroKind=filtroKind===k?'':k;renderTables()}
+function renderKindFilters(){
+ const el=$('#kindFilters');if(!el)return;
+ const cuenta=k=>data.ingredients.filter(x=>kindOf(x)===k).length;
+ el.innerHTML=KINDS.map(k=>{const n=cuenta(k.k);
+  return `<button class="kfilter${filtroKind===k.k?' active':''}" onclick="setKindFilter('${k.k}')">${k.emoji} ${k.n} <span>${n}</span></button>`}).join('')
+  +(filtroKind?`<button class="kfilter clear" onclick="setKindFilter('')">Ver todo</button>`:'')}
+
 function setCount(sel,shown,total,singular,plural){
  const el=$(sel);if(!el)return;
  const t=countLabel(shown,total,singular,plural);
@@ -257,8 +269,13 @@ $('#expenseRows').innerHTML=ex.map(x=>`<tr><td data-label="Fecha">${fmtDate(x.da
 $('#expensesEmpty').style.display=ex.length?'none':'block';
 setCount('#expenseCount',ex.length,data.expenses.length,'gasto','gastos');
 const qi=(($('#ingSearch')||{}).value||'').toLowerCase().trim();
-const ing=data.ingredients.filter(x=>!qi||(x.name||'').toLowerCase().includes(qi));
-$('#ingredientRows').innerHTML=ing.map(x=>`<tr><td class="main"><b>${esc(x.name)}</b></td><td data-label="Cómo lo compras">${esc(x.unit)} de ${esc(x.quantity)} ${esc(unitInfo(x.unitSingle).s)}</td><td data-label="Te costó">${money(x.price)}</td><td class="amount" data-label="Sale a">${(()=>{const d=displayCost(x);return money(d.amount)+' / '+esc(d.unit)})()}</td><td class="actions"><button class="icon-btn" onclick="openIngredient('${x.id}')" aria-label="Editar ingrediente">✎</button><button class="icon-btn" onclick="removeItem('ingredients','${x.id}')" aria-label="Eliminar ingrediente">×</button></td></tr>`).join('');
+const ing=data.ingredients.filter(x=>(!qi||(x.name||'').toLowerCase().includes(qi))&&
+  (!filtroKind||kindOf(x)===filtroKind));
+renderKindFilters();
+$('#ingredientRows').innerHTML=ing.map(x=>{const k=KINDS.find(z=>z.k===kindOf(x))||KINDS[0];
+ const sale=costBreakdown(x).map(c=>money(c.amount)+' / '+esc(c.unit)).join('<br>');
+ const trae=x.unitWeight?` · cada uno ${prettyQty(x.unitWeight)} ${esc(unitInfo(x.unitWeightUnit||'g').s)}`:'';
+ return `<tr><td class="main"><b>${k.emoji} ${esc(x.name)}</b></td><td data-label="Cómo lo compras">${esc(x.unit)} de ${esc(x.quantity)} ${esc(unitInfo(x.unitSingle).s)}${trae}</td><td data-label="Te costó">${money(x.price)}</td><td class="amount" data-label="Sale a">${sale}</td><td class="actions"><button class="icon-btn" onclick="openIngredient('${x.id}')" aria-label="Editar ingrediente">✎</button><button class="icon-btn" onclick="removeItem('ingredients','${x.id}')" aria-label="Eliminar ingrediente">×</button></td></tr>`}).join('');
 $('#ingredientsEmpty').style.display=ing.length?'none':'block';
 setCount('#ingCount',ing.length,data.ingredients.length,'guardado','guardados')}
 function renderChart(){const src=(window.ALLDATA&&window.ALLDATA.sales)||data.sales;const now=new Date(),vals=[0,0,0,0,0,0],labels=[];
@@ -277,15 +294,19 @@ function renderTopProducts(){const map={};data.sales.forEach(x=>{const k=x.produ
 const top=Object.entries(map).sort((a,b)=>b[1].total-a[1].total).slice(0,5);
 $('#topProducts').innerHTML=top.length?top.map(([n,v])=>`<div class="row"><span class="dot"></span><div class="grow"><b>${esc(n)}</b><small>${v.qty} unidades vendidas</small></div><span class="amount">${money(v.total)}</span></div>`).join(''):'<div class="empty">Registra ventas para ver tu ranking de productos.</div>'}
 function openModal(title,body){$('#dialog').innerHTML=`<h2>${title}</h2>${body}`;$('#modal').classList.add('show');document.body.classList.add('modal-open');$('#dialog').scrollTop=0}function closeModal(){$('#modal').classList.remove('show');document.body.classList.remove('modal-open')}$('#modal').onclick=e=>{if(e.target.id==='modal')closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});function field(label,id,type='text',value='',extra=''){return `<div class="field"><label>${label}</label><input id="${id}" type="${type}" value="${value}" ${extra}></div>`}
-// Etiqueta de la unidad en la que se expresan los macros: la etiqueta del
-// producto viene por 100 g o por 100 ml, así que se sigue esa misma convención.
-function macroBase(unitSingle){const fam=unitFamily(unitSingle||'g');
- return fam==='volumen'?'100 ml':fam==='conteo'?'100 unidades':'100 g'}
+// Sobre qué cantidad se leen los macros. Para lo que se pesa son 100 g o
+// 100 ml, como en las etiquetas. Para lo que se cuenta es UNA pieza: los datos
+// de una banana se dicen por banana, no por cien bananas.
+const macroBase=u=>macroBasis(u).etiqueta;
 
 function macroFields(g){const m=(g&&g.macros)||{};
  const abierto=hasMacros(g)?' open':'';
+ const u=(g&&g.unitSingle)||'g';
+ // Lo guardado está por 100 unidades base; lo que se enseña está en la base que
+ // se lee (100 g, o una pieza).
+ const vista=k=>{const v=macroToShow(m[k],u);return v==null?'':esc(v)};
  const filas=MACROS.map(x=>`<div class="field"><label>${x.n} (${x.u})</label>
-  <input id="mac_${x.k}" type="number" min="0" step="0.01" inputmode="decimal" value="${m[x.k]!=null&&m[x.k]!==''?esc(m[x.k]):''}"></div>`).join('');
+  <input id="mac_${x.k}" type="number" min="0" step="0.01" inputmode="decimal" value="${vista(x.k)}"></div>`).join('');
  return `<details class="macros"${abierto}>
   <summary>Información nutricional <span class="opt">opcional</span></summary>
   <p class="helper">Sirve para saber cuánta azúcar, proteína o grasa lleva cada postre.</p>
@@ -298,8 +319,6 @@ function macroFields(g){const m=(g&&g.macros)||{};
    <p class="helper" id="scanHint">Toma una foto de la tabla nutricional y se llena solo.</p>`:''}
   <p class="helper"><b>Por cada <span id="macBase">${macroBase(g&&g.unitSingle)}</span></b></p>
   <div class="form-grid">${filas}</div>
-  <label class="fruta-check"><input id="ingFruta" type="checkbox" ${esFruta(g)?'checked':''}>
-   <span><b>Es una fruta</b><small>La fruta lleva azúcar natural (fructosa), así que las recetas con fruta salen como “bajo en azúcar” y no como “sin azúcar”.</small></span></label>
  </details>`}
 
 // Lee la etiqueta de una foto y llena los campos. Ella no elige nada: o sale, o
@@ -324,23 +343,86 @@ async function scanLabel(e){const file=e.target.files&&e.target.files[0];e.targe
 
 // Recoge los macros del formulario. Vacío = null (no se sabe), que no es lo
 // mismo que 0.
-// La casilla manda sobre lo que se adivina por el nombre: así una ralladura de
-// limón se puede desmarcar y una "pulpa" sin nombre obvio se puede marcar.
-function readFruta(){const el=document.getElementById('ingFruta');
- return el?el.checked:undefined}
+// Lo que ella elige manda sobre lo que se adivina por el nombre: así una
+// ralladura de limón se puede sacar de "fruta" y una "pulpa" que no suena a
+// nada se puede meter.
+function readKind(){const el=document.getElementById('ingKind');
+ return el&&KIND_KEYS.includes(el.value)?el.value:'ingrediente'}
 
-function readMacros(){const m={};let alguno=false;
+function readMacros(unitSingle){const m={};let alguno=false;
  MACRO_KEYS.forEach(k=>{const el=document.getElementById('mac_'+k);
   const v=el&&el.value.trim();
-  if(v===''||v==null||!isFinite(+v)){m[k]=null}else{m[k]=+v;alguno=true}});
+  const guardado=macroToStore(v,unitSingle);
+  if(guardado==null){m[k]=null}else{m[k]=guardado;alguno=true}});
  return alguno?m:null}
 
-function openIngredient(id){const g=data.ingredients.find(x=>x.id===id)||{name:'',unit:'',quantity:1,price:'',unitSingle:'unidad'};
-openModal(id?'Editar ingrediente':'Nuevo ingrediente',`<div class="form-grid">${field('Nombre','ingName','text',esc(g.name))}${field('¿Cómo lo compras?','ingUnit','text',esc(g.unit),'placeholder="ej. bolsa, caja, botella"')}${field('¿Cuánto trae?','ingQty','text',g.quantity!=null&&g.quantity!==''?prettyQty(g.quantity):'','readonly data-pad="1" placeholder="toca para escribir" onfocus="openPad(this)" onclick="openPad(this)"')}<div class="field"><label>¿En qué se mide?</label><select id="ingUnitSingle" onchange="const b=$('#macBase');if(b)b.textContent=macroBase(this.value)">${unitOptions(g.unitSingle||'g')}</select></div>${field('¿Cuánto te costó? ($)','ingPrice','number',g.price,'min="0" step="0.01" inputmode="decimal"')}</div><p class="helper">Ejemplo: compras una bolsa de harina de 5 libras por $6.50 → escribes “bolsa”, 5 y eliges “libras”. Después en tus recetas puedes usar gramos: la cuenta se hace sola.</p>${macroFields(g)}<div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="addIngredient('${id||''}')">Guardar ingrediente</button></div>`)}
-function addIngredient(id){const name=$('#ingName').value.trim(),unit=$('#ingUnit').value.trim(),quantity=parseQty($('#ingQty').value),price=+$('#ingPrice').value,unitSingle=$('#ingUnitSingle').value||'g';
-if(!name||!unit||!quantity||!(price>=0))return toast('Completa todos los campos.',true);
-const macros=readMacros(),fruta=readFruta();
-const rec=sello({id:id||crypto.randomUUID(),name,unit,quantity,price,unitSingle,macros,fruta});
+function openIngredient(id){const g=data.ingredients.find(x=>x.id===id)||{name:'',unit:'',quantity:1,price:'',unitSingle:'g'};
+const kind=kindOf(g);
+const pesoUnidad=`<div class="field peso-unidad" id="pesoUnidad" style="${unitFamily(g.unitSingle||'g')==='conteo'?'':'display:none'}">
+  <label>¿Cuánto pesa cada uno? <span class="opt">opcional</span></label>
+  <div class="par">
+   <input id="ingUnitWeight" type="number" min="0" step="0.01" inputmode="decimal" value="${g.unitWeight!=null&&g.unitWeight!==''?esc(g.unitWeight):''}" placeholder="ej. 113" oninput="renderIngPreview()">
+   <select id="ingUnitWeightUnit" onchange="renderIngPreview()">${unitOptions(g.unitWeightUnit||'g',null,['conteo'])}</select>
+  </div>
+  <small class="helper">Una caja de 24 barras de mantequilla son 24 unidades, y cada barra 113 g. Con eso te digo el precio por barra y por gramo, y puedes cocinar en gramos.</small>
+ </div>`;
+openModal(id?'Editar ingrediente':'Nuevo ingrediente',`
+ <div class="kind-tabs" role="tablist">${KINDS.map(k=>`
+  <button type="button" role="tab" class="${k.k===kind?'active':''}" data-kind="${k.k}" onclick="pickKind(this)">${k.emoji} ${k.n}</button>`).join('')}
+  <input type="hidden" id="ingKind" value="${kind}"></div>
+ <div class="form-grid">
+  ${field('Nombre','ingName','text',esc(g.name),'oninput="renderIngPreview()"')}
+  ${field('¿Cómo lo compras?','ingUnit','text',esc(g.unit),'placeholder="ej. bolsa, caja, mata"')}
+  ${field('¿Cuánto trae?','ingQty','text',g.quantity!=null&&g.quantity!==''?prettyQty(g.quantity):'','readonly data-pad="1" placeholder="toca para escribir" onfocus="openPad(this)" onclick="openPad(this)"')}
+  <div class="field"><label>¿En qué se mide?</label>
+   <select id="ingUnitSingle" onchange="onIngUnitChange(this.value)">${unitOptions(g.unitSingle||'g')}</select></div>
+  ${field('¿Cuánto te costó? ($)','ingPrice','number',g.price,'min="0" step="0.01" inputmode="decimal" oninput="renderIngPreview()"')}
+ </div>
+ ${pesoUnidad}
+ <div id="ingPreview" class="preview"></div>
+ ${macroFields(g)}
+ <div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="addIngredient('${id||''}')">Guardar ingrediente</button></div>`);
+renderIngPreview()}
+
+/** Cambia la categoría. La de fruta es la que decide las etiquetas de azúcar. */
+function pickKind(btn){
+ document.querySelectorAll('.kind-tabs button').forEach(b=>b.classList.toggle('active',b===btn));
+ $('#ingKind').value=btn.dataset.kind;
+ renderIngPreview()}
+
+/** El peso por pieza sólo tiene sentido para lo que se cuenta. */
+function onIngUnitChange(u){
+ const b=$('#macBase');if(b)b.textContent=macroBase(u);
+ const p=$('#pesoUnidad');if(p)p.style.display=unitFamily(u)==='conteo'?'':'none';
+ // Los macros se escriben sobre otra base al cambiar de unidad, y dejar los
+ // números de antes con la etiqueta nueva sería enseñar un dato falso.
+ renderIngPreview()}
+
+function ingFromForm(){
+ return {name:($('#ingName')||{}).value||'',
+  unit:($('#ingUnit')||{}).value||'',
+  quantity:parseQty(($('#ingQty')||{}).value||0),
+  price:+(($('#ingPrice')||{}).value||0),
+  unitSingle:($('#ingUnitSingle')||{}).value||'g',
+  unitWeight:+(($('#ingUnitWeight')||{}).value||0)||null,
+  unitWeightUnit:($('#ingUnitWeightUnit')||{}).value||'g',
+  kind:($('#ingKind')||{}).value||'ingrediente'}}
+
+/** "Te sale a": ahora puede decir dos cosas — por pieza y por peso. */
+function renderIngPreview(){
+ const el=$('#ingPreview');if(!el)return;
+ const g=ingFromForm();
+ if(!(g.quantity>0)||!(g.price>0)){el.innerHTML='';return}
+ const partes=costBreakdown(g).map(c=>`<b>${money(c.amount)}</b> por ${esc(c.unit)}`);
+ el.innerHTML=`<span>Te sale a</span> ${partes.join(' &nbsp;·&nbsp; ')}`}
+
+function addIngredient(id){const g=ingFromForm();
+if(!g.name.trim()||!g.unit.trim()||!g.quantity||!(g.price>=0))return toast('Completa todos los campos.',true);
+const macros=readMacros(g.unitSingle);
+const rec=sello({id:id||crypto.randomUUID(),name:g.name.trim(),unit:g.unit.trim(),
+ quantity:g.quantity,price:g.price,unitSingle:g.unitSingle,
+ unitWeight:g.unitWeight,unitWeightUnit:g.unitWeight?g.unitWeightUnit:undefined,
+ kind:readKind(),macros});
 if(id)data.ingredients=data.ingredients.map(x=>x.id===id?rec:x);else data.ingredients.push(rec);
 save(id?'Ingrediente actualizado':'Ingrediente guardado');closeModal()}
 function ingredientLines(lines=[]){return `<div class="ingredients" id="ingredientsForm">${(lines.length?lines:[{}]).map(x=>ingredientLine(x)).join('')}</div><button class="btn alt" type="button" onclick="addLine()">+ Agregar ingrediente</button>`}
@@ -348,26 +430,55 @@ function ingredientLine(x={}){const opts=data.ingredients.map(i=>`<option value=
 const sel=data.ingredients.find(i=>i.id===x.ingredientId);
 const name=x.name||(sel&&sel.name)||'';
 const unit=x.unit||(sel?sel.unitSingle:'g')||'g';
-const cost=x.cost!=null&&x.cost!==''?x.cost:(sel?baseCost(sel)*unitInfo(unit).f:'');
+const cost=x.cost!=null&&x.cost!==''?x.cost:(sel?(lineUnitCost(sel,unit)||0):'');
 return `<div class="ingredient-line" data-name="${esc(name)}">
 ${data.ingredients.length?`<select data-n="ingredientId" onchange="pickIngredient(this)"><option value="">Elige un ingrediente</option>${opts}</select>`:`<input placeholder="Ingrediente" value="${esc(name)}" data-n="name">`}
 <input type="text" readonly data-pad="1" placeholder="cantidad" value="${x.qty!=null&&x.qty!==''?prettyQty(x.qty):''}" data-n="qty" onfocus="openPad(this)" onclick="openPad(this)" oninput="lineTotal(this)">
-<select data-n="unit" onchange="pickUnit(this)">${unitOptions(unit,sel?unitFamily(sel.unitSingle):null)}</select>
+<select data-n="unit" onchange="pickUnit(this)">${unitOptionsFor(sel,unit)}</select>
 <input type="hidden" data-n="cost" value="${cost}">
 <button class="icon-btn" type="button" aria-label="Quitar ingrediente" onclick="this.closest('.ingredient-line').remove();recipeTotals()">×</button>
 <div class="line-total"></div></div>`}
+
+/**
+ * Las unidades que se le pueden ofrecer a una línea de receta.
+ *
+ * Todas las de su familia, más las de la otra cuando se sabe cuánto pesa una
+ * pieza: leche comprada en litros se puede medir en cucharadas, y mantequilla
+ * comprada por barras se puede medir en gramos. Las que no se pueden convertir
+ * sin inventarse la densidad no se ofrecen, porque ofrecerlas sería prometer
+ * una cuenta que no se puede hacer.
+ */
+function unitOptionsFor(ing,selected){
+ if(!ing)return unitOptions(selected);
+ return Object.entries(UNITS).filter(([k])=>unitFactor(ing,k))
+  .map(([k,v])=>`<option value="${k}" ${k===selected?'selected':''}>${v.n}</option>`).join('')}
+
 function pickIngredient(select){const ing=data.ingredients.find(i=>i.id===select.value),line=select.closest('.ingredient-line');if(!ing)return;
 line.dataset.name=ing.name;
 const us=line.querySelector('[data-n=unit]');
-us.innerHTML=unitOptions(ing.unitSingle,unitFamily(ing.unitSingle));
+us.innerHTML=unitOptionsFor(ing,ing.unitSingle);
 pickUnit(us)}
+
 function pickUnit(select){const line=select.closest('.ingredient-line'),ing=data.ingredients.find(i=>i.id===(line.querySelector('[data-n=ingredientId]')||{}).value);
-if(ing)line.querySelector('[data-n=cost]').value=baseCost(ing)*unitInfo(select.value).f;
+if(ing){const c=lineUnitCost(ing,select.value);
+ line.querySelector('[data-n=cost]').value=c==null?0:c}
 lineTotal(select)}
 function addLine(){$('#ingredientsForm').insertAdjacentHTML('beforeend',ingredientLine());recipeTotals()}
 function lineTotal(el){const l=el.closest('.ingredient-line'),q=parseQty(l.querySelector('[data-n=qty]').value),c=+l.querySelector('[data-n=cost]').value||0;
 const u=(l.querySelector('[data-n=unit]')||{}).value;
-l.querySelector('.line-total').textContent=q&&c?`${prettyQty(q)} ${unitInfo(u).s} cuestan ${money(q*c)}`:'';recipeTotals()}
+const ing=data.ingredients.find(i=>i.id===(l.querySelector('[data-n=ingredientId]')||{}).value);
+const conv=ing&&q?conversionInfo(ing,u,q):null;
+// Cuando la unidad de la receta no es la de la compra, se dice. Un costo que
+// aparece solo, sin explicar de dónde salió, es un costo en el que no se confía.
+l.querySelector('.line-total').innerHTML=q&&c
+ ? `${prettyQty(q)} ${esc(unitInfo(u).s)} cuestan ${money(q*c)}`
+   +(conv?` <button type="button" class="conv" onclick='verConversion(${JSON.stringify(conv).replace(/'/g,"&#39;")})'>⇄ ${esc(conv.texto)} <span class="i">i</span></button>`:'')
+ : '';
+recipeTotals()}
+
+/** Explica una conversión, para que no parezca magia. */
+function verConversion(info){
+ toast(info.texto+' — '+info.detalle)}
 const ingredientsById=()=>{const m={};data.ingredients.forEach(i=>{m[i.id]=i});return m};
 
 /**

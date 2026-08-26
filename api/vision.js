@@ -133,6 +133,16 @@ async function askGroq(mime, base64, signal) {
     const err = new Error('groq ' + res.status);
     err.status = res.status;
     err.detail = detail.slice(0, 300);
+    // 429 es "vas muy rápido", no "esta foto no se puede leer". Pasa de verdad:
+    // ella fotografía tres ingredientes seguidos y el segundo y el tercero se
+    // caen. Se espera lo que diga el servidor y se reintenta una vez, porque
+    // lo que ella ve es una etiqueta que no se lee sin razón aparente.
+    if (res.status === 429 && !yaReintentado) {
+      const espera = segundosDeEspera(res, detail);
+      console.warn('vision: límite de peticiones, reintentando en', espera, 's');
+      await new Promise(r => setTimeout(r, espera * 1000));
+      return leerEtiqueta(mime, base64, true);
+    }
     throw err;
   }
 
@@ -141,6 +151,22 @@ async function askGroq(mime, base64, signal) {
                json.choices[0].message && json.choices[0].message.content;
   if (!text) throw new Error('respuesta vacía');
   return JSON.parse(text);
+}
+
+/**
+ * Cuánto esperar antes de reintentar tras un 429.
+ *
+ * Groq lo dice en la cabecera `retry-after` o dentro del cuerpo ("try again in
+ * 7.5s"). Se acota a 8 segundos: más que eso y la petición se comería el
+ * presupuesto de la función, y es mejor decírselo que dejarla mirando la
+ * pantalla.
+ */
+function segundosDeEspera(res, detail) {
+  const cabecera = parseFloat(res.headers.get('retry-after'));
+  if (Number.isFinite(cabecera) && cabecera > 0) return Math.min(cabecera, 8);
+  const enCuerpo = /try again in ([\d.]+)\s*s/i.exec(detail || '');
+  if (enCuerpo) return Math.min(parseFloat(enCuerpo[1]) + 0.3, 8);
+  return 3;
 }
 
 function parseBody(req) {
@@ -155,8 +181,18 @@ const MOTIVOS = {
   'sin-tabla':   'Esa foto no parece una tabla nutricional. Enfoca la parte donde dicen las calorías.',
   'sin-datos':   'No alcancé a leer los números. Prueba de nuevo con más luz y de frente.',
   'sin-porcion': 'Leí la tabla, pero no dice cuánto pesa una porción. Escribe primero cuánto trae el paquete y vuelve a intentarlo.',
-  'error':       'No pude leer la etiqueta ahora. Puedes escribir los datos a mano.'
+  'error':       'No pude leer la etiqueta ahora. Puedes escribir los datos a mano.',
+  'ocupado':     'Voy muy rápido. Espera unos segundos y toma la foto otra vez.',
+  'sin-llave':   'La lectura por foto no está disponible ahora. Puedes escribir los datos a mano.'
 };
+
+/** Traduce un fallo del servicio a algo que se pueda leer y hacer. */
+function motivoDelFallo(err) {
+  const s = err && err.status;
+  if (s === 429) return 'ocupado';
+  if (s === 401 || s === 403) return 'sin-llave';
+  return 'error';
+}
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
@@ -227,7 +263,8 @@ module.exports = async function handler(req, res) {
     });
   } catch (err) {
     console.error('vision error', err && err.status, err && (err.detail || err.message));
-    return res.status(200).json({ ok: false, motivo: 'error', mensaje: MOTIVOS.error });
+    const motivo = motivoDelFallo(err);
+    return res.status(200).json({ ok: false, motivo: motivo, mensaje: MOTIVOS[motivo] });
   } finally {
     clearTimeout(timer);
   }

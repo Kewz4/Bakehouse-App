@@ -447,7 +447,7 @@ test('la receta se crea con el costo primero y el precio sale del margen', async
   } finally { await d.close(); }
 });
 
-test('"Te sale a" usa una unidad que se pueda leer, no $0.00 por gramo', async () => {
+test('"Te sale a" sube de unidad sin cambiarte de sistema de medida', async () => {
   const d = await device();
   try {
     await d.page.evaluate(() => {
@@ -457,9 +457,50 @@ test('"Te sale a" usa una unidad que se pueda leer, no $0.00 por gramo', async (
     });
     await d.page.waitForSelector('#ingredientRows tr', { timeout: 10000 });
     const celda = await d.page.textContent('#ingredientRows tr td.amount');
+
+    // $0.0027 el gramo se ve como $0.00, así que hay que subir de unidad. Ese
+    // era el fallo original.
     assert.ok(!/\$0\.00/.test(celda), 'no debe mostrar $0.00: ' + celda);
-    assert.ok(/por lb|\/ lb/.test(celda) || /1\.2[0-9]/.test(celda),
-      'debería salir alrededor de $1.24 por lb: ' + celda);
+    // Pero se sube dentro de SU sistema: quien compra en gramos quiere kilos,
+    // no onzas ni libras. Era la segunda queja de él, y la primera versión de
+    // esta prueba fijaba justo el comportamiento que le molestaba.
+    assert.ok(/kg/.test(celda), 'debería salir por kilos: ' + celda);
+    assert.ok(!/(lb|oz)/.test(celda), 'no debería cambiar a libras ni onzas: ' + celda);
+    assert.ok(/2\.7[0-9]/.test(celda), 'debería salir alrededor de $2.72 por kg: ' + celda);
+  } finally { await d.close(); }
+});
+
+test('lo que se compra por piezas dice también el precio por peso', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => {
+      // Su ejemplo: una caja de 7 barras de mantequilla por $7.
+      data.ingredients.push(sello({ id: 'mant', name: 'Mantequilla', unit: 'Caja',
+        quantity: 7, price: 7, unitSingle: 'u', unitWeight: 113, unitWeightUnit: 'g' }));
+      save(); go('inventory');
+    });
+    await d.page.waitForSelector('#ingredientRows tr', { timeout: 10000 });
+    const celda = await d.page.textContent('#ingredientRows tr td.amount');
+
+    assert.ok(/\$1\.00/.test(celda), 'la barra tiene que salir a $1.00: ' + celda);
+    assert.ok(/kg|g\b/.test(celda), 'y además el precio por peso: ' + celda);
+    assert.deepEqual(d.errors, []);
+  } finally { await d.close(); }
+});
+
+test('una receta puede pedir gramos de algo que se compra por barras', async () => {
+  const d = await device();
+  try {
+    const total = await d.page.evaluate(() => {
+      const mant = { id: 'mant', name: 'Mantequilla', unit: 'Caja', quantity: 7,
+                     price: 7, unitSingle: 'u', unitWeight: 113, unitWeightUnit: 'g' };
+      // 200 g de una barra de 113 g son 1.77 barras, y cada barra cuesta $1.
+      return { costo: lineUnitCost(mant, 'g') * 200,
+               texto: conversionInfo(mant, 'g', 200).texto };
+    });
+    assert.ok(Math.abs(total.costo - 200 / 113) < 1e-9,
+      'el costo tiene que salir de cuánto pesa una barra: ' + total.costo);
+    assert.equal(total.texto, '200 g = 1.77 u');
   } finally { await d.close(); }
 });
 

@@ -215,3 +215,35 @@ body.pad-open .tabbar{opacity:0;pointer-events:none}
     .fruta-check input{width:20px;height:20px;accent-color:var(--green);margin-top:1px;flex:none}
     .fruta-check b{display:block;font-size:14px;color:var(--ink)}
     .fruta-check small{display:block;font-size:11px;color:var(--muted);margin-top:3px;line-height:1.4}
+
+    /* ===== Categorías, peso por pieza y conversiones ===== */
+    /* Las pestañas de categoría del formulario de ingrediente. */
+    .kind-tabs{display:flex;gap:6px;margin:0 0 16px;flex-wrap:wrap}
+    .kind-tabs button{flex:1;min-width:110px;padding:11px 10px;border-radius:12px;
+      background:#f3f1e9;color:var(--muted);font-weight:700;font-size:13px;
+      border:1px solid transparent;transition:background .18s,color .18s,border-color .18s}
+    .kind-tabs button.active{background:var(--green);color:#fff;border-color:var(--green)}
+    /* Los filtros de la lista. El número dice cuántos hay sin tener que entrar. */
+    .kind-filters{display:flex;gap:8px;flex-wrap:wrap;margin:-6px 0 16px}
+    .kfilter{padding:8px 12px;border-radius:11px;background:#fff;border:1px solid var(--line);
+      color:var(--muted);font-weight:700;font-size:13px;min-height:38px}
+    .kfilter span{opacity:.55;margin-left:3px}
+    .kfilter.active{background:var(--green);color:#fff;border-color:var(--green)}
+    .kfilter.active span{opacity:.8}
+    .kfilter.clear{background:transparent;border-style:dashed}
+    /* El peso de cada pieza: número y unidad, uno al lado del otro. */
+    .peso-unidad .par{display:grid;grid-template-columns:1fr 1.2fr;gap:8px}
+    .peso-unidad{margin:2px 0 14px}
+    .opt{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;
+      color:var(--muted);background:#f2efe6;border-radius:20px;padding:3px 7px;margin-left:6px}
+    /* "Te sale a", debajo del precio, mientras se escribe. */
+    .preview{min-height:22px;margin:2px 0 14px;font-size:14px;color:var(--ink)}
+    .preview span{color:var(--muted);font-size:12px;margin-right:6px}
+    /* El aviso de que hubo una conversión entre unidades. */
+    .conv{background:#eef3ea;color:var(--green);border-radius:8px;padding:3px 7px;
+      font-size:11px;font-weight:700;margin-left:6px;display:inline-flex;align-items:center;gap:5px;
+      animation:convIn .28s ease}
+    .conv .i{display:inline-flex;align-items:center;justify-content:center;width:14px;height:14px;
+      border-radius:50%;background:var(--green);color:#fff;font-size:9px;font-weight:900}
+    @keyframes convIn{from{opacity:0;transform:translateY(-3px) scale(.96)}to{opacity:1;transform:none}}
+    @media(max-width:760px){.kind-tabs button{min-width:0;font-size:12px;padding:10px 6px}}
