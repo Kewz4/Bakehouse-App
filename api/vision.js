@@ -118,7 +118,6 @@ async function askGroq(mime, base64, signal) {
     body: JSON.stringify({
       model: MODEL,
       temperature: 0,
-      max_tokens: 4000,
       messages: [
         { role: 'system', content: PROMPT },
         {
