@@ -108,7 +108,8 @@ async function consultar(nombre, yaReintentado) {
       body: JSON.stringify({
         model: MODEL,
         temperature: 0,
-        max_tokens: 1400,
+        max_tokens: 4000,
+        reasoning_effort: 'none',
         messages: [
           { role: 'system', content: PROMPT },
           { role: 'user', content: `Ingrediente: ${nombre}` }
