@@ -39,7 +39,7 @@ const SCHEMA = {
     // Siempre por 100 g de producto crudo y comestible, que es la referencia
     // en la que están publicadas las tablas de composición de alimentos.
     por100g: {
-      type: 'object',
+      type: ['object', 'null'],
       properties: {
         calorias: { type: ['number', 'null'] },
         proteina: { type: ['number', 'null'] },
@@ -76,24 +76,28 @@ REGLAS
    procesar —fruta, verdura, huevo, carne— tiene 0, aunque tenga azúcar propia.
    La fructosa de la fruta va en "azucar", no en "azucarAnadida".
 
-3. "gramosPorPieza": cuánto pesa una pieza mediana comestible, si el alimento
-   se cuenta por piezas. Una banana mediana ~118 g, un huevo grande ~50 g, una
+3. "gramosPorPieza": UN solo número, cuánto pesa una pieza mediana comestible,
+   si el alimento se cuenta por piezas. Nunca un rango ("8-12") ni texto
+   ("12 g"): si varía mucho, da el valor típico. Una banana mediana ~118 g, un huevo grande ~50 g, una
    fresa ~12 g, un limón ~58 g. Si no se cuenta por piezas (harina, aceite,
    leche), pon null.
 
 4. "esFruta": true para frutas y verduras frescas. El coco es un caso aparte:
    ponlo en false, porque su harina y su aceite casi no llevan azúcar.
 
-5. Si no reconoces el alimento, o el texto no es un alimento, pon
-   esAlimento: false y deja por100g en null. NO te inventes valores: es
+5. Todos los valores de por100g son números o null. Nunca texto, nunca rangos,
+   nunca "<1": si algo es menor que 1, escribe ese límite.
+
+6. Si no reconoces el alimento, o el texto no es un alimento, pon
+   esAlimento: false y por100g en null. NO te inventes valores: es
    preferible que lo escriba a mano a que se guarde un dato falso.
 
-6. "confianza": alta para alimentos comunes y bien documentados, media si
+7. "confianza": alta para alimentos comunes y bien documentados, media si
    varía mucho según variedad o preparación, baja si dudas.
 
 Responde SÓLO con el JSON del esquema.`;
 
-async function consultar(nombre) {
+async function consultar(nombre, yaReintentado) {
   const control = new AbortController();
   const timer = setTimeout(() => control.abort(), TIMEOUT_MS);
   try {
@@ -120,6 +124,16 @@ async function consultar(nombre) {
       const err = new Error('groq ' + res.status);
       err.status = res.status;
       err.detail = detail.slice(0, 300);
+      if (res.status === 429 && !yaReintentado) {
+        const espera = Math.min(
+          parseFloat(res.headers.get('retry-after'))
+            || (parseFloat((/try again in ([\d.]+)\s*s/i.exec(detail || '') || [])[1]) + 0.3)
+            || 3, 8);
+        console.warn('nutrition: límite de peticiones, reintentando en', espera, 's');
+        clearTimeout(timer);
+        await new Promise(r => setTimeout(r, espera * 1000));
+        return consultar(nombre, true);
+      }
       throw err;
     }
     const json = await res.json();
@@ -138,6 +152,7 @@ const MOTIVOS = {
   'sin-peso':      'Necesito saber cuánto pesa cada uno. Escríbelo arriba y vuelve a intentarlo.',
   'sin-densidad':  'Para lo que se mide en líquidos hace falta la etiqueta. Toma una foto o escríbelo a mano.',
   'ocupado':       'Voy muy rápido. Espera unos segundos y vuelve a tocarlo.',
+  'rara':          'No pude entender la respuesta para eso. Escribe los datos a mano.',
   'sin-llave':     'Esto no está disponible ahora. Puedes escribir los datos a mano.',
   'error':         'No pude buscarlo ahora. Puedes escribir los datos a mano.'
 };
@@ -146,6 +161,9 @@ function motivoDelFallo(err) {
   const s = err && err.status;
   if (s === 429) return 'ocupado';
   if (s === 401 || s === 403) return 'sin-llave';
+  // Un 400 con salida estructurada significa que lo que respondió el modelo no
+  // encajó en el esquema. Es un fallo de esta consulta, no del servicio.
+  if (s === 400) return 'rara';
   return 'error';
 }
 
