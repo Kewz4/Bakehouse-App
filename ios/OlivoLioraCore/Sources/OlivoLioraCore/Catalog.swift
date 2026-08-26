@@ -134,7 +134,7 @@ public struct MacroBasis: Sendable, Equatable {
 /// Réplica de normalizarReferencia() en business-core.js.
 public enum ReferenceNutrition {
 
-    public enum Failure: String, Sendable {
+    public enum Failure: String, Sendable, Error {
         case sinDatos = "sin-datos"
         case sinPeso = "sin-peso"
         case sinDensidad = "sin-densidad"
