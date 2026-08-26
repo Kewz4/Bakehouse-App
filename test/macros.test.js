@@ -385,3 +385,97 @@ test('los trozos de la cabecera se juntan saltándose los que faltan', () => {
   assert.equal(B.joinDetail([null, null]), null);
   assert.equal(B.joinDetail([]), null);
 });
+
+// --- Nutrición de lo que no trae etiqueta ------------------------------------
+// Una banana no viene con tabla pegada, pero sus datos son conocimiento
+// general. El modelo aporta los valores por 100 g y cuánto pesa una pieza; las
+// conversiones se hacen aquí, y son estas.
+
+const BANANA_100G = { calorias: 89, proteina: 1.1, carbohidratos: 22.8, azucar: 12.2,
+                      azucarAnadida: 0, grasa: 0.3, grasaSaturada: 0.1, fibra: 2.6, sodioMg: 1 };
+
+test('una fruta que se cuenta guarda sus datos por pieza', () => {
+  const out = B.normalizarReferencia(BANANA_100G, 118, 'u');
+  assert.equal(out.ok, true);
+  // Lo que se enseña es por banana: 89 kcal/100 g x 118 g = 105 kcal.
+  assert.ok(Math.abs(B.macroToShow(out.macros.calorias, 'u') - 105.02) < 0.05,
+    'una banana son ~105 kcal, salió ' + B.macroToShow(out.macros.calorias, 'u'));
+  assert.ok(Math.abs(B.macroToShow(out.macros.azucar, 'u') - 14.4) < 0.1);
+  // La fructosa es azúcar propia, no añadida.
+  assert.equal(B.macroToShow(out.macros.azucarAnadida, 'u'), 0);
+});
+
+test('una fruta que se pesa guarda los valores tal cual', () => {
+  const out = B.normalizarReferencia(BANANA_100G, 118, 'g');
+  assert.equal(out.ok, true);
+  assert.equal(out.macros.calorias, 89);
+  assert.equal(B.macroToShow(out.macros.calorias, 'g'), 89);
+});
+
+test('sin saber cuánto pesa una pieza no se inventa el dato', () => {
+  // "89 kcal por banana" sería falso: son 89 por cada 100 g.
+  for (const peso of [null, 0, -5, 'mucho']) {
+    const out = B.normalizarReferencia(BANANA_100G, peso, 'u');
+    assert.equal(out.ok, false, 'peso ' + JSON.stringify(peso));
+    assert.equal(out.motivo, 'sin-peso');
+  }
+});
+
+test('de gramos a mililitros no se convierte sin densidad', () => {
+  // Un jugo y un puré del mismo peso no ocupan lo mismo. Adivinarlo daría un
+  // número tan creíble como equivocado. Misma regla que con las cucharadas.
+  const out = B.normalizarReferencia(BANANA_100G, 118, 'ml');
+  assert.equal(out.ok, false);
+  assert.equal(out.motivo, 'sin-densidad');
+});
+
+test('unos valores vacíos no cuentan como respuesta', () => {
+  assert.equal(B.normalizarReferencia(null, 118, 'g').ok, false);
+  assert.equal(B.normalizarReferencia({}, 118, 'g').ok, false);
+  const todosNulos = {};
+  B.MACRO_KEYS.forEach(k => { todosNulos[k] = null; });
+  assert.equal(B.normalizarReferencia(todosNulos, 118, 'g').motivo, 'sin-datos');
+});
+
+test('los huecos de la referencia se quedan en blanco, no en cero', () => {
+  const parcial = Object.assign({}, BANANA_100G, { sodioMg: null, fibra: null });
+  const out = B.normalizarReferencia(parcial, 118, 'u');
+  assert.equal(out.macros.sodioMg, null);
+  assert.equal(out.macros.fibra, null);
+  assert.ok(out.macros.calorias > 0);
+});
+
+// --- El empaque no es un ingrediente ----------------------------------------
+
+test('una caja no impide que la receta consiga etiquetas de dieta', () => {
+  // Antes esto era imposible: al empaque le faltan macros, y una receta con un
+  // ingrediente sin cubrir no recibe ninguna etiqueta. Una caja no es un
+  // ingrediente y no debería contar para eso.
+  const almendra = { id: 'alm', name: 'Harina de almendra', quantity: 1, price: 8, unitSingle: 'kg',
+    macros: { calorias: 600, proteina: 21, carbohidratos: 20, azucar: 4, azucarAnadida: 0,
+              grasa: 53, grasaSaturada: 4, fibra: 11, sodioMg: 1 } };
+  const caja = { id: 'caj', name: 'Caja de 6', kind: 'empaque', quantity: 50, price: 12, unitSingle: 'u' };
+  const ingredientes = { alm: almendra, caj: caja };
+
+  const receta = { name: 'Galletas', yield: 6, price: 3, ingredients: [
+    { ingredientId: 'alm', qty: 100, unit: 'g', cost: 0 },
+    { ingredientId: 'caj', qty: 1, unit: 'u', cost: 0 }
+  ]};
+
+  const m = B.recipeMacros(receta, ingredientes);
+  assert.equal(m.completo, true, 'la caja no debería dejar la receta incompleta');
+  assert.equal(m.total, 1, 'sólo cuenta un ingrediente comestible');
+
+  const badges = B.recipeBadges(receta, ingredientes);
+  assert.ok(badges.badges.some(b => b.k === 'sinAzucar'),
+    'debería salir sin azúcar: ' + JSON.stringify(badges.badges.map(b => b.k)));
+});
+
+test('el empaque no aporta macros aunque alguien se los escriba', () => {
+  const caja = { id: 'caj', name: 'Caja', kind: 'empaque', quantity: 1, price: 1, unitSingle: 'u',
+    macros: { calorias: 999, proteina: 0, carbohidratos: 0, azucar: 0, azucarAnadida: 0,
+              grasa: 0, grasaSaturada: 0, fibra: 0, sodioMg: 0 } };
+  const m = B.recipeMacros({ yield: 1, ingredients: [{ ingredientId: 'caj', qty: 1, unit: 'u' }] },
+                           { caj: caja });
+  assert.equal(m.totals.calorias, 0, 'una caja no alimenta a nadie');
+});

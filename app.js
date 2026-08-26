@@ -209,7 +209,19 @@ const fmtDate=d=>{if(!d)return '—';const m=String(d).match(/^(\d{4})-(\d{2})-(
 let toastTimer;function toast(msg,isError){const t=$('#toast');t.textContent=msg;t.className='show'+(isError?' err':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='',isError?4200:2400)}
 function go(view){if(!document.getElementById(view))view='dashboard';document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===view));$('#fab').dataset.view=view;window.scrollTo({top:0,behavior:'smooth'});try{history.replaceState(null,'','#'+view)}catch(e){}}
 function fabAction(){({dashboard:openSale,recipes:openRecipe,sales:openSale,expenses:openExpense,inventory:openIngredient}[$('#fab').dataset.view||'dashboard'])()}
-function nav(){document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));go((location.hash||'#dashboard').slice(1));window.addEventListener('hashchange',()=>go(location.hash.slice(1)))}
+function nav(){document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));
+go((location.hash||'#dashboard').slice(1));
+// Al abrir con "#dashboard" en la dirección, el navegador salta él solo hasta
+// esa sección y deja la cabecera fuera de pantalla. Y lo hace DESPUÉS de que
+// corra este script, así que no basta con subir aquí: hay que volver a subir
+// cuando la página termina de cargar, y desactivar la restauración de posición
+// que el navegador aplica al volver atrás.
+try{history.scrollRestoration='manual'}catch(e){}
+const arriba=()=>window.scrollTo(0,0);
+arriba();
+requestAnimationFrame(arriba);
+window.addEventListener('load',arriba,{once:true});
+window.addEventListener('hashchange',()=>go(location.hash.slice(1)))}
 function render(){const sales=data.sales.reduce((a,s)=>a+(+s.total||0),0),production=data.sales.reduce((a,s)=>{let r=data.recipes.find(x=>x.id===s.recipeId);return a+(r?recipeUnitCost(r)*(+s.qty||0):0)},0),expenses=data.expenses.reduce((a,e)=>a+(+e.amount||0),0),profit=sales-production-expenses;$('#mSales').textContent=money(sales);$('#mCost').textContent=money(production);$('#mExpenses').textContent=money(expenses);$('#mProfit').textContent=money(profit);$('#mMargin').textContent=sales?'Te quedan '+Math.round(profit/sales*100)+' centavos de cada dólar':'Aún sin ventas';renderRecipes();renderTables();renderChart(sales);renderAlerts()}
 // Filtro por etiqueta de dieta. Vacío = todas.
 let filtroBadge='';
@@ -315,11 +327,49 @@ function macroFields(g){const m=(g&&g.macros)||{};
     <input id="macFile" type="file" accept="image/*" onchange="scanLabel(event)" hidden>
     <button type="button" class="btn alt small" onclick="$('#macCam').click()">📷 Leer con la cámara</button>
     <button type="button" class="btn alt small" onclick="$('#macFile').click()">🖼 Elegir foto</button>
+   <button type="button" class="btn alt small" onclick="buscarNutricion()">🍎 Es fruta o verdura</button>
    </div>
-   <p class="helper" id="scanHint">Toma una foto de la tabla nutricional y se llena solo.</p>`:''}
+   <p class="helper" id="scanHint">Toma una foto de la tabla nutricional y se llena solo. Si es fruta o verdura no hace falta foto: toca el botón de al lado.</p>`:''}
   <p class="helper"><b>Por cada <span id="macBase">${macroBase(g&&g.unitSingle)}</span></b></p>
   <div class="form-grid">${filas}</div>
  </details>`}
+
+/**
+ * Busca los datos de una fruta o verdura sin foto ninguna.
+ *
+ * Una banana no trae etiqueta pegada, pero sus valores son conocimiento
+ * general. Se manda sólo el nombre; las cuentas —de "por 100 g" a "por
+ * banana"— las hace business-core.js, no el modelo.
+ */
+async function buscarNutricion(){
+ const hint=$('#scanHint');
+ const g=ingFromForm();
+ if(!g.name.trim()){if(hint)hint.textContent='Escribe primero el nombre.';return}
+ if(hint)hint.textContent='Buscando los datos de '+g.name.trim()+'…';
+ try{
+  const r=await fetch('api/nutrition',{method:'POST',headers:{'content-type':'application/json'},
+   body:JSON.stringify({nombre:g.name.trim(),unitSingle:g.unitSingle,
+                        gramosPorPieza:g.unitWeight&&unitFamily(g.unitWeightUnit)==='masa'
+                          ?g.unitWeight*unitInfo(g.unitWeightUnit).f:0})});
+  const j=await r.json();
+
+  // Aunque no haya podido con los macros, saber cuánto pesa una pieza sirve.
+  if(j.gramosPorPieza&&!g.unitWeight){const el=$('#ingUnitWeight');
+   if(el&&el.offsetParent!==null){el.value=j.gramosPorPieza;
+    const u=$('#ingUnitWeightUnit');if(u)u.value='g';renderIngPreview()}}
+
+  if(!j.ok){if(hint)hint.textContent=j.mensaje||'No pude buscarlo.';return}
+
+  let puestos=0;
+  MACRO_KEYS.forEach(k=>{const el=document.getElementById('mac_'+k);
+   const v=macroToShow(j.macros[k],g.unitSingle);
+   if(el&&v!=null){el.value=v;puestos++}});
+  if(j.esFruta){const b=document.querySelector('.kind-tabs button[data-kind=fruta]');if(b)pickKind(b)}
+  if(hint)hint.textContent=puestos
+   ? `Listo: ${puestos} datos de ${esc(j.nombre)}${j.confianza==='baja'?'. Revísalos, no estoy seguro.':'. Revisa que estén bien.'}`
+   : 'No encontré datos.';
+  toast(puestos?'Datos de '+j.nombre+' ✓':'No encontré datos.',!puestos);
+ }catch(err){if(hint)hint.textContent='No pude buscarlo ahora. Puedes escribir los datos a mano.'}}
 
 // Lee la etiqueta de una foto y llena los campos. Ella no elige nada: o sale, o
 // se le dice en una línea qué hacer distinto.
@@ -334,8 +384,10 @@ async function scanLabel(e){const file=e.target.files&&e.target.files[0];e.targe
   const j=await r.json();
   if(!j.ok){if(hint)hint.textContent=j.mensaje||'No pude leer esa etiqueta.';return}
   let puestos=0;
+  const u=($('#ingUnitSingle')||{}).value||'g';
   MACRO_KEYS.forEach(k=>{const el=document.getElementById('mac_'+k);
-   if(el&&j.macros[k]!=null){el.value=j.macros[k];puestos++}});
+   const v=macroToShow(j.macros[k],u);
+   if(el&&v!=null){el.value=v;puestos++}});
   if(hint)hint.textContent=puestos?`Listo: ${puestos} datos llenados${j.confianza==='baja'?'. Revísalos, la foto salió borrosa.':'. Revisa que estén bien.'}`
                                   :'No encontré datos en esa foto.';
   toast(puestos?'Etiqueta leída ✓':'No encontré datos en esa foto.',!puestos);

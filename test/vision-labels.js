@@ -87,8 +87,9 @@ async function main() {
       // "ocupado" no es un fallo de lectura: es el límite de peticiones. Se
       // distingue para que el informe no acuse al lector de algo que no hizo.
       const etiqueta = res.motivo === 'ocupado' ? 'servicio ocupado' : 'no pudo leerla';
-      fallos.push(`${caso.id}: ${etiqueta} (${res.motivo || '?'}) — ${res.mensaje || ''}`);
-      console.log(`   ✗ ${etiqueta}: ${res.motivo || '?'} — ${res.mensaje || ''}`);
+      const estado = res.estado ? ` [HTTP ${res.estado}]` : '';
+      fallos.push(`${caso.id}: ${etiqueta} (${res.motivo || '?'})${estado}`);
+      console.log(`   ✗ ${etiqueta}: ${res.motivo || '?'}${estado} — ${res.mensaje || ''}`);
       continue;
     }
 

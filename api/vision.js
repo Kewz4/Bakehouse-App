@@ -264,7 +264,13 @@ module.exports = async function handler(req, res) {
   } catch (err) {
     console.error('vision error', err && err.status, err && (err.detail || err.message));
     const motivo = motivoDelFallo(err);
-    return res.status(200).json({ ok: false, motivo: motivo, mensaje: MOTIVOS[motivo] });
+    // El código de estado va en la respuesta a propósito. Es un número, no
+    // dice nada de nadie, y sin él un fallo del servicio y una foto ilegible se
+    // ven exactamente igual desde fuera — que es lo que hizo perder una tarde
+    // entera creyendo que el lector estaba roto cuando estaba ocupado.
+    return res.status(200).json({ ok: false, motivo: motivo,
+                                  mensaje: MOTIVOS[motivo],
+                                  estado: (err && err.status) || 0 });
   } finally {
     clearTimeout(timer);
   }

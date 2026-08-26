@@ -366,6 +366,131 @@ function normalizarEtiqueta(lectura,paquete){
  return {ok:true,macros:macros,confianza:lectura.confianza||'media'};
 }
 
+/**
+ * Convierte unos valores de referencia (por 100 g) a lo que se guarda.
+ *
+ * Una banana no trae etiqueta, pero sus datos son conocimiento general. El
+ * modelo aporta los valores por 100 g y cuánto pesa una pieza típica; la cuenta
+ * se hace aquí, por lo mismo de siempre: una división mal hecha por el modelo
+ * se ve igual de convincente que una bien hecha, y aquí acaba en un precio o en
+ * una etiqueta de dieta.
+ *
+ * `gramosPorPieza` sólo hace falta cuando el ingrediente se cuenta.
+ */
+function normalizarReferencia(por100g,gramosPorPieza,unitSingle){
+ if(!por100g)return {ok:false,motivo:'sin-datos'};
+ const tieneAlgo=MACRO_KEYS.some(k=>por100g[k]!=null&&isFinite(+por100g[k]));
+ if(!tieneAlgo)return {ok:false,motivo:'sin-datos'};
+
+ const fam=unitFamily(unitSingle||'g');
+
+ // De gramos a mililitros hace falta la densidad, y no es la misma para un
+ // jugo que para un puré. Inventarla daría un número creíble y falso.
+ if(fam==='volumen')return {ok:false,motivo:'sin-densidad'};
+
+ let factor;
+ if(fam==='masa'){
+  factor=1;                     // ya viene por 100 g, que es como se guarda
+ }else{
+  const g=+gramosPorPieza;
+  if(!isFinite(g)||g<=0)return {ok:false,motivo:'sin-peso'};
+  // Guardado = por 100 piezas. Una pieza aporta por100g x g/100, así que cien
+  // piezas aportan por100g x g.
+  factor=g;
+ }
+
+ const macros={};
+ MACRO_KEYS.forEach(k=>{const n=+por100g[k];
+  macros[k]=(por100g[k]==null||!isFinite(n))?null:+(n*factor).toFixed(2)});
+ return {ok:true,macros:macros,gramosPorPieza:+gramosPorPieza||null};
+}
+
+// ---------------------------------------------------------------------------
+// Inversión y gastos
+// ---------------------------------------------------------------------------
+// Tres cosas distintas que antes eran una sola:
+//
+//   gasto       una compra suelta de este mes (el gas, unas cajas)
+//   inversion   maquinaria y compras de una vez. Cuesta una vez y sirve años.
+//   recurrente  algo que se repite: cada semana o cada mes, sin volver a anotarlo
+//
+// La inversión NO se resta de la ganancia del mes. Una batidora de $2000 no
+// hace que un mes bueno parezca un desastre: se compra una vez y trabaja
+// durante años. Se cuenta aparte, que es justo lo que él pidió — saber cuánto
+// lleva invertido.
+const TIPOS_GASTO=[
+ {k:'gasto',      n:'Gasto',      d:'Una compra de este mes'},
+ {k:'inversion',  n:'Inversión',  d:'Maquinaria y cosas que se compran una vez'},
+ {k:'recurrente', n:'Recurrente', d:'Se repite solo cada semana o cada mes'}];
+const FRECUENCIAS=[
+ {k:'semanal',n:'Cada semana',dias:7},
+ {k:'mensual',n:'Cada mes',dias:null}];
+
+const tipoGasto=x=>{const t=x&&x.tipo;
+ return TIPOS_GASTO.some(z=>z.k===t)?t:'gasto'};
+const frecuenciaDe=x=>(x&&x.frecuencia)==='semanal'?'semanal':'mensual';
+
+/** Una fecha suelta a medianoche, sin que el huso horario la corra un día. */
+function fechaDe(v){
+ if(v instanceof Date)return isNaN(v)?null:v;
+ const t=String(v||'');
+ const d=new Date(t.length<=10?t+'T12:00:00':t);
+ return isNaN(d)?null:d}
+
+/**
+ * Cuántas veces cae un gasto recurrente dentro de un período.
+ *
+ * Se anota una vez ("$50 al mes de gas") y a partir de su fecha se repite solo.
+ * Contar sólo la anotación haría que un gasto de enero no apareciera en marzo,
+ * y el margen del negocio saldría mejor de lo que es.
+ */
+function vecesEnRango(x,desde,hasta){
+ const inicio=fechaDe(x&&x.date);
+ if(!inicio||!desde||!hasta||hasta<desde)return 0;
+ const fin=fechaDe(x&&x.hasta);
+ const tope=fin&&fin<hasta?fin:hasta;
+ if(tope<desde||inicio>tope)return 0;
+
+ let n=0;
+ const cursor=new Date(inicio);
+ const semanal=frecuenciaDe(x)==='semanal';
+ // Un tope duro: si alguien pone una fecha de hace veinte años, contar semana
+ // a semana no debe quedarse dando vueltas.
+ const MAX=5000;
+ while(cursor<=tope&&n<MAX){
+  if(cursor>=desde)n++;
+  if(semanal)cursor.setDate(cursor.getDate()+7);
+  else cursor.setMonth(cursor.getMonth()+1);
+ }
+ return n}
+
+/** Cuánto suma un gasto dentro de un período. */
+function montoEnRango(x,desde,hasta){
+ const monto=+((x&&x.amount)||0)||0;
+ if(tipoGasto(x)!=='recurrente'){
+  const d=fechaDe(x&&x.date);
+  return d&&d>=desde&&d<=hasta?monto:0}
+ return monto*vecesEnRango(x,desde,hasta)}
+
+/**
+ * Reparte los gastos de un período en las tres cosas que son.
+ *
+ * `operativo` es lo que se resta de la ganancia. `inversion` no: se acumula
+ * aparte para poder decir cuánto lleva puesto en el negocio.
+ */
+function desgloseGastos(lista,desde,hasta){
+ const out={operativo:0,inversion:0,recurrente:0,sueltos:0,total:0};
+ (lista||[]).forEach(x=>{
+  const monto=montoEnRango(x,desde,hasta);
+  if(!monto)return;
+  const t=tipoGasto(x);
+  if(t==='inversion')out.inversion+=monto;
+  else if(t==='recurrente')out.recurrente+=monto;
+  else out.sueltos+=monto});
+ out.operativo=out.sueltos+out.recurrente;
+ out.total=out.operativo+out.inversion;
+ return out}
+
 // ---------------------------------------------------------------------------
 // Etiquetas de dieta
 // ---------------------------------------------------------------------------
@@ -523,6 +648,7 @@ return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS
         MACROS:MACROS, MACRO_KEYS:MACRO_KEYS, hasMacros:hasMacros,
         macroPerBase:macroPerBase, recipeMacros:recipeMacros,
         normalizarEtiqueta:normalizarEtiqueta,
+        normalizarReferencia:normalizarReferencia,
         BADGES:BADGES, ALL_BADGES:ALL_BADGES,
         recipeBadges:recipeBadges, esPaleo:esPaleo,
         esFruta:esFruta, nombreEsFruta:nombreEsFruta, FRUTAS:FRUTAS,
@@ -530,5 +656,8 @@ return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS
         unitWeight:unitWeight, unitFactor:unitFactor, lineUnitCost:lineUnitCost,
         conversionInfo:conversionInfo, costBreakdown:costBreakdown,
         macroBasis:macroBasis, macroToStore:macroToStore, macroToShow:macroToShow,
-        countLabel:countLabel, joinDetail:joinDetail};
+        countLabel:countLabel, joinDetail:joinDetail,
+        TIPOS_GASTO:TIPOS_GASTO, FRECUENCIAS:FRECUENCIAS, tipoGasto:tipoGasto,
+        frecuenciaDe:frecuenciaDe, vecesEnRango:vecesEnRango, montoEnRango:montoEnRango,
+        desgloseGastos:desgloseGastos};
 });

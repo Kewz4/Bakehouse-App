@@ -3,16 +3,20 @@ import SwiftUI
 /// Los mismos colores y tipografías que la web, para que la app y el sitio se
 /// sientan una sola cosa.
 enum Theme {
-    static let ink     = Color(hex: 0x20362C)
-    static let green   = Color(hex: 0x365B4C)
-    static let sage    = Color(hex: 0xDCE6D8)
-    static let cream   = Color(hex: 0xFBF9F3)
-    static let peach   = Color(hex: 0xF1C6A8)
-    static let gold    = Color(hex: 0xC8954E)
-    static let red     = Color(hex: 0xBD5A50)
-    static let line    = Color(hex: 0xE7E2D7)
-    static let muted   = Color(hex: 0x748178)
-    static let card    = Color(hex: 0xFFFEFA)
+    // La paleta de la marca. `green` es el color de acento y ahora es el
+    // burgundy del logo; conserva el nombre porque cambiarlo tocaría cien
+    // sitios sin cambiar nada de lo que se ve.
+    static let ink     = Color(hex: 0x2E1B14)   // marrón oscuro
+    static let green   = Color(hex: 0x570507)   // burgundy: el acento
+    static let sage    = Color(hex: 0xF0E4E0)   // burgundy muy aguado
+    static let cream   = Color(hex: 0xF4F1EA)   // el fondo
+    static let peach   = Color(hex: 0xE0C78A)
+    static let gold    = Color(hex: 0x7C7C36)   // olivo
+    static let red     = Color(hex: 0xA3282B)
+    static let line    = Color(hex: 0xE6E0D6)
+    static let muted   = Color(hex: 0x8A7A70)
+    static let card    = Color(hex: 0xFFFDF8)
+    static let nata    = Color(hex: 0xFFFDD0)   // el crema del lettering
 
     /// Los títulos de la web usan Georgia; en iOS el equivalente de sistema es
     /// New York, que es lo que da `.serif`.
