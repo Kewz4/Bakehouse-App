@@ -50,18 +50,15 @@ public extension Ingredient {
     /// Cuánto aporta 1 unidad base (1 g, 1 ml, 1 unidad).
     func macroPerBase(_ m: Macro) -> Double { (macro(m) ?? 0) / 100 }
 
-    /// ¿Es fruta? Lo que ella marcó manda; si no marcó nada, se mira el nombre.
+    /// ¿Cuenta como fruta para las etiquetas de azúcar?
     ///
     /// Importa porque la fruta lleva fructosa aunque no tenga azúcar añadida, y
-    /// entonces la receta es "baja en azúcar", nunca "sin azúcar".
-    var isFruit: Bool {
-        if let flag = record["fruta"]?.boolValue { return flag }
-        let name = self.name.lowercased()
-        return Badges.fruitWords.contains { name.contains($0) }
-    }
+    /// entonces la receta es "baja en azúcar", nunca "sin azúcar". Ahora sale de
+    /// la categoría, que es donde vive esa decisión.
+    var isFruit: Bool { kind == .fruta }
 
-    mutating func setFruit(_ value: Bool?) {
-        record["fruta"] = value.map { JSONValue.bool($0) }
+    mutating func setKind(_ value: IngredientKind) {
+        record["kind"] = .string(value.rawValue)
     }
 }
 
@@ -111,7 +108,13 @@ public extension Analytics {
     /// Réplica exacta de `recipeMacros()` en business-core.js.
     static func macros(for recipe: Recipe, ingredients: [String: Ingredient]) -> RecipeMacros {
         var out = RecipeMacros()
-        let lines = recipe.lines
+        // El empaque queda fuera de la cuenta entera: no aporta nada y tampoco
+        // puede impedir que la receta consiga etiquetas por "faltarle un
+        // ingrediente", porque una caja no es un ingrediente.
+        let lines = recipe.lines.filter { line in
+            guard let id = line.ingredientId, let ing = ingredients[id] else { return true }
+            return ing.kind.feeds
+        }
         out.total = lines.count
 
         for m in Macro.allCases { out.totals[m] = 0 }
@@ -120,8 +123,12 @@ public extension Analytics {
             guard let id = line.ingredientId,
                   let ing = ingredients[id],
                   ing.hasMacros else { continue }
-            // La cantidad de la línea llevada a unidades base.
-            let base = line.qty * Units.info(line.unit.isEmpty ? ing.unitSingle : line.unit).factor
+            // La cantidad de la línea llevada a unidades base. Puede cruzar de
+            // contar a pesar cuando se sabe cuánto pesa una pieza (200 g de
+            // mantequilla que se compra por barras), y por eso no basta con el
+            // factor de la unidad.
+            guard let f = ing.unitFactor(line.unit.isEmpty ? ing.unitSingle : line.unit) else { continue }
+            let base = line.qty * f.factor
             for m in Macro.allCases {
                 out.totals[m, default: 0] += base * ing.macroPerBase(m)
             }

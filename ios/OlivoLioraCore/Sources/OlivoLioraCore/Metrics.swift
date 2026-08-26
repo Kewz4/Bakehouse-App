@@ -68,7 +68,13 @@ public struct Metrics: Sendable {
     public var salesTotal: Double = 0
     /// Lo que costó hacer lo vendido (ingredientes).
     public var productionCost: Double = 0
+    /// Lo que se resta de la ganancia: gastos sueltos más recurrentes.
     public var expensesTotal: Double = 0
+    /// Lo invertido en este período, y desde el principio.
+    public var investmentPeriod: Double = 0
+    public var investmentEver: Double = 0
+    public var recurringTotal: Double = 0
+    public var oneOffTotal: Double = 0
     public var profit: Double = 0
     public var salesCount: Int = 0
     public var unitsSold: Double = 0
@@ -126,7 +132,11 @@ public enum Analytics {
         let recipesById = Dictionary(
             recipes(doc).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         let periodSales = sales(doc).filter { inRange($0.date, range) }
-        let periodExpenses = expenses(doc).filter { inRange($0.date, range) }
+        // Los gastos NO se filtran por fecha aquí: un gasto recurrente se anota
+        // una vez y vale para todos los períodos siguientes, así que filtrarlo
+        // por su fecha lo haría desaparecer del mes que viene y la ganancia
+        // saldría mejor de lo que es. De eso se encarga Investment.
+        let todos = expenses(doc)
 
         var m = Metrics()
         m.salesTotal = periodSales.reduce(0) { $0 + $1.total }
@@ -134,8 +144,15 @@ public enum Analytics {
             guard let r = recipesById[sale.recipeId] else { return acc }
             return acc + r.unitCost * sale.qty
         }
-        m.expensesTotal = periodExpenses.reduce(0) { $0 + $1.amount }
-        m.profit = m.salesTotal - m.productionCost - m.expensesTotal
+        let g = Investment.breakdown(todos, from: range.lowerBound, to: range.upperBound)
+        m.expensesTotal = g.operating
+        m.investmentPeriod = g.investment
+        m.investmentEver = Investment.investedEver(todos)
+        m.recurringTotal = g.recurring
+        m.oneOffTotal = g.oneOff
+        // La inversión NO se resta: una batidora se compra una vez y trabaja
+        // durante años. Restarla del mes haría parecer un desastre un mes bueno.
+        m.profit = m.salesTotal - m.productionCost - g.operating
         m.salesCount = periodSales.count
         m.unitsSold = periodSales.reduce(0) { $0 + $1.qty }
         m.averageTicket = periodSales.isEmpty ? 0 : m.salesTotal / Double(periodSales.count)

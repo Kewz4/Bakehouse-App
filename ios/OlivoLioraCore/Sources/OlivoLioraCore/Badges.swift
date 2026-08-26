@@ -70,6 +70,13 @@ public enum Badges {
         "jocote", "mamey", "zapote", "anona", "nispero", "níspero", "lichi",
         "carambola", "fruta"]
 
+    /// ¿El nombre suena a fruta? Es sólo la detección automática: la categoría
+    /// que ella elija manda sobre esto.
+    public static func nameLooksLikeFruit(_ nombre: String) -> Bool {
+        let n = nombre.lowercased()
+        return fruitWords.contains { n.contains($0) }
+    }
+
     /// Paleo no se puede deducir de los macros: no es cuestión de cantidades
     /// sino de qué lleva la receta. Se mira por nombre, y a propósito de forma
     /// estricta — ante la duda, no se pone.
@@ -115,8 +122,14 @@ public enum Badges {
         //
         // Si algún ingrediente no declara la azúcar añadida no se pone ninguna
         // de las dos: es una afirmación sobre salud y no se hace a medias.
-        let used = recipe.lines.compactMap { $0.ingredientId.flatMap { ingredients[$0] } }
-        let knowAdded = used.count == recipe.lines.count
+        // El empaque no se come: ni aporta azúcar ni puede impedir que se sepa
+        // cuánta lleva la receta.
+        let edibleLines = recipe.lines.filter { line in
+            guard let id = line.ingredientId, let ing = ingredients[id] else { return true }
+            return ing.kind.feeds
+        }
+        let used = edibleLines.compactMap { $0.ingredientId.flatMap { ingredients[$0] } }
+        let knowAdded = used.count == edibleLines.count && !edibleLines.isEmpty
             && used.allSatisfy { $0.macro(.azucarAnadida) != nil }
         if knowAdded {
             let added = v(.azucarAnadida)
@@ -139,7 +152,7 @@ public enum Badges {
         if v(.grasa) <= 3 { out.badges.append(badge("bajoGrasa")) }
         if v(.sodioMg) <= 140 { out.badges.append(badge("bajoSodio")) }
 
-        if used.count == recipe.lines.count, isPaleo(used) {
+        if used.count == edibleLines.count, isPaleo(used) {
             out.badges.append(badge("paleo"))
         }
 

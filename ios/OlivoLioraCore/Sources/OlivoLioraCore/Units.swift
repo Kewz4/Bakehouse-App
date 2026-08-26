@@ -7,11 +7,19 @@ public struct MeasureUnit: Hashable, Sendable {
     public let key: String
     public let factor: Double
     public let family: Family
+    /// A qué sistema de medida pertenece. Al subir de unidad porque el precio
+    /// se leería como "$0.00", se busca dentro del mismo: quien compra en
+    /// gramos quiere ver kilos, no onzas.
+    public var system: System { Units.systemOf(key) }
     public let name: String
     public let short: String
 
     public enum Family: String, Sendable, CaseIterable {
         case masa, volumen, conteo
+    }
+
+    public enum System: Sendable {
+        case metrico, imperial, casero, conteo
     }
 }
 
@@ -34,6 +42,20 @@ public enum Units {
 
     public static func info(_ key: String) -> MeasureUnit { byKey[key] ?? byKey["u"]! }
     public static func family(_ key: String) -> MeasureUnit.Family { info(key).family }
+
+    static func systemOf(_ key: String) -> MeasureUnit.System {
+        switch key {
+        case "g", "kg", "ml", "l":       return .metrico
+        case "lb", "oz":                 return .imperial
+        case "taza", "cda", "cdta":      return .casero
+        default:                         return .conteo
+        }
+    }
+
+    /// La unidad de referencia de una familia: el gramo, el mililitro, la unidad.
+    public static func base(_ family: MeasureUnit.Family) -> MeasureUnit {
+        all.first { $0.family == family && $0.factor == 1 } ?? info("u")
+    }
     public static func inFamily(_ family: MeasureUnit.Family) -> [MeasureUnit] { all.filter { $0.family == family } }
 }
 

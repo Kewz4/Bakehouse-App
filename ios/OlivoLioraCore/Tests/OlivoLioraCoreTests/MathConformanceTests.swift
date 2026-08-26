@@ -18,6 +18,9 @@ final class MathConformanceTests: XCTestCase {
             struct Input: Decodable {
                 let name: String; let quantity: Double
                 let price: Double; let unitSingle: String
+                /// Opcional: cuánto pesa una pieza, para lo que se compra en cajas.
+                let unitWeight: Double?
+                let unitWeightUnit: String?
             }
             let `in`: Input; let out: Double
         }
@@ -80,8 +83,52 @@ final class MathConformanceTests: XCTestCase {
             let `in`: [String?]
             let out: String?
         }
+        struct EscalaCase: Decodable {
+            let `in`: IngredientCase.Input
+            let amount: Double
+            let unit: String
+        }
+        struct BreakdownCase: Decodable {
+            struct Salida: Decodable { let amount: Double; let unit: String }
+            let `in`: IngredientCase.Input
+            let salidas: [Salida]
+        }
+        struct FactorCase: Decodable {
+            struct Input: Decodable {
+                let ing: IngredientCase.Input
+                let unit: String
+                let qty: Double
+            }
+            let `in`: Input
+            let factor: Double?
+            let via: String?
+            let lineCost: Double?
+            let texto: String?
+        }
+        struct BasisCase: Decodable {
+            let `in`: String
+            let amount: Double
+            let unit: String
+            let etiqueta: String
+            let factor: Double
+        }
+        struct KindCase: Decodable {
+            struct Input: Decodable {
+                let name: String
+                let kind: String?
+                let fruta: Bool?
+            }
+            let `in`: Input
+            let kind: String
+            let fruta: Bool
+        }
         let baseCost: [IngredientCase]
         let displayCost: [DisplayCostCase]
+        let displayCostEscala: [EscalaCase]
+        let costBreakdown: [BreakdownCase]
+        let unitFactor: [FactorCase]
+        let macroBasis: [BasisCase]
+        let kindOf: [KindCase]
         let countLabel: [CountCase]
         let joinDetail: [JoinCase]
         let recipe: [RecipeCase]
@@ -298,6 +345,85 @@ final class MathConformanceTests: XCTestCase {
         for c in try load().joinDetail {
             XCTAssertEqual(Labels.joinAll(c.in), c.out,
                            "\(c.in): la unión de trozos no coincide")
+        }
+    }
+
+    // MARK: - Lo nuevo: peso por pieza, conversión y categorías
+
+    /// Un ingrediente de prueba a partir de lo que dicen los casos.
+    private func hacer(_ i: Fixtures.IngredientCase.Input) -> Ingredient {
+        var ing = Ingredient(name: i.name, unit: "paquete",
+                             quantity: i.quantity, price: i.price, unitSingle: i.unitSingle)
+        if let w = i.unitWeight { ing.unitWeight = w }
+        if let u = i.unitWeightUnit { ing.unitWeightUnit = u }
+        return ing
+    }
+
+    /// Al subir de unidad porque el precio se leería como "$0.00", los dos
+    /// lados tienen que elegir la MISMA unidad. Si no, el teléfono diría
+    /// "$1.24 por lb" y la laptop "$2.72 por kg" para la misma harina.
+    func testCostEscalationMatchesJavaScript() throws {
+        for c in try load().displayCostEscala {
+            let got = hacer(c.in).displayCost
+            XCTAssertEqual(got.unit, c.unit, "«\(c.in.name)»: unidad distinta")
+            XCTAssertEqual(got.amount, c.amount, accuracy: 1e-9, "«\(c.in.name)»: importe distinto")
+        }
+    }
+
+    /// El precio por pieza y por peso, para lo que se compra en cajas.
+    func testCostBreakdownMatchesJavaScript() throws {
+        for c in try load().costBreakdown {
+            let got = hacer(c.in).costBreakdown
+            XCTAssertEqual(got.count, c.salidas.count, "«\(c.in.name)»: número de precios distinto")
+            for (a, b) in zip(got, c.salidas) {
+                XCTAssertEqual(a.unit, b.unit, "«\(c.in.name)»: unidad distinta")
+                XCTAssertEqual(a.amount, b.amount, accuracy: 1e-9, "«\(c.in.name)»: importe distinto")
+            }
+        }
+    }
+
+    /// La conversión de una línea de receta. Es lo que decide cuánto cuesta
+    /// una receta, así que una diferencia aquí sale directamente en el precio.
+    func testUnitConversionMatchesJavaScript() throws {
+        for c in try load().unitFactor {
+            let ing = hacer(c.in.ing)
+            let f = ing.unitFactor(c.in.unit)
+
+            if c.factor == nil {
+                XCTAssertNil(f, "«\(c.in.ing.name)» en \(c.in.unit) no se debería poder convertir")
+                continue
+            }
+            let got = try XCTUnwrap(f, "«\(c.in.ing.name)» en \(c.in.unit) debería convertirse")
+            XCTAssertEqual(got.factor, c.factor!, accuracy: 1e-9)
+            XCTAssertEqual(got.via?.rawValue, c.via)
+            if let esperado = c.lineCost {
+                XCTAssertEqual(try XCTUnwrap(ing.lineUnitCost(c.in.unit)), esperado, accuracy: 1e-9)
+            }
+            XCTAssertEqual(ing.conversion(to: c.in.unit, qty: c.in.qty)?.texto, c.texto,
+                           "«\(c.in.ing.name)»: el texto de la conversión no coincide")
+        }
+    }
+
+    /// Sobre qué cantidad se leen los macros: 100 g, o una pieza.
+    func testMacroBasisMatchesJavaScript() throws {
+        for c in try load().macroBasis {
+            let b = MacroBasis.of(c.in)
+            XCTAssertEqual(b.amount, c.amount, "\(c.in)")
+            XCTAssertEqual(b.unit, c.unit, "\(c.in)")
+            XCTAssertEqual(b.label, c.etiqueta, "\(c.in)")
+            XCTAssertEqual(b.factor, c.factor, "\(c.in)")
+        }
+    }
+
+    /// Ingrediente, fruta o empaque. Decide las etiquetas de azúcar y si algo
+    /// cuenta para los macros, así que no puede leerse distinto en cada lado.
+    func testIngredientKindMatchesJavaScript() throws {
+        for c in try load().kindOf {
+            var ing = Ingredient(name: c.in.name, unit: "u", quantity: 1, price: 1, unitSingle: "u")
+            if let k = c.in.kind { ing.record["kind"] = .string(k) }
+            if let f = c.in.fruta { ing.record["fruta"] = .bool(f) }
+            XCTAssertEqual(ing.kind.rawValue, c.kind, "«\(c.in.name)»")
+            XCTAssertEqual(ing.isFruit, c.fruta, "«\(c.in.name)»: fruta")
         }
     }
 }

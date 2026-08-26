@@ -61,25 +61,100 @@ public struct Ingredient: RecordBacked, Hashable, Sendable {
         return price / (q == 0 ? 1 : q)
     }
 
+    /// Cuánto pesa (o cuánto mide) UNA pieza. Opcional.
+    ///
+    /// Una caja de 24 barras de mantequilla son 24 unidades, y además cada
+    /// barra pesa 113 g. Con ese dato salen dos cosas: el precio por barra Y
+    /// por gramo, y una receta puede pedir 200 g de mantequilla aunque la
+    /// compra se haga por piezas.
+    public var unitWeight: Double {
+        get { record["unitWeight"]?.doubleValue ?? 0 }
+        set { record["unitWeight"] = newValue > 0 ? .number(newValue) : .null }
+    }
+
+    public var unitWeightUnit: String {
+        get { record["unitWeightUnit"]?.stringValue ?? "g" }
+        set { record["unitWeightUnit"] = .string(newValue) }
+    }
+
+    /// El peso de una pieza, ya en unidades base, o nil si no se sabe.
+    public var pieceWeight: (amount: Double, unit: String, base: Double, family: MeasureUnit.Family)? {
+        guard unitWeight > 0 else { return nil }
+        let u = Units.info(unitWeightUnit)
+        // "cada unidad pesa 3 unidades" no dice nada; hace falta peso o volumen.
+        guard u.family != .conteo else { return nil }
+        return (unitWeight, unitWeightUnit, unitWeight * u.factor, u.family)
+    }
+
+    /// Qué clase de cosa es. El empaque cuesta pero no se come.
+    public var kind: IngredientKind { IngredientKind.of(self) }
+
     /// A cuánto sale, en una unidad que se pueda leer.
     ///
     /// Manda la unidad que ELLA eligió: si compra la harina en kilos, la quiere
-    /// ver en kilos, no en onzas. Sólo se cambia cuando su unidad daría "$0.00"
-    /// —una harina de $1.25 la bolsa de 459 g sale a $0.0027 el gramo, y a dos
-    /// decimales eso es cero—; ahí se sube a la unidad más pequeña que pase de
-    /// 10 centavos. Réplica de displayCost() en business-core.js.
+    /// ver en kilos. Sólo se cambia cuando su unidad daría "$0.00" —una harina
+    /// de $1.25 la bolsa de 459 g sale a $0.0027 el gramo, y a dos decimales eso
+    /// es cero—, y aun entonces se busca dentro de su mismo sistema de medida:
+    /// quien compra en gramos quiere kilos, no onzas.
+    /// Réplica de displayCost() en business-core.js.
     public var displayCost: (amount: Double, unit: String) {
-        let perBase = baseCost
-        let own = Units.info(unitSingle)
-        // Su unidad, si se lee bien.
-        if perBase * own.factor >= Ingredient.costReadable {
-            return (perBase * own.factor, own.short)
+        Units.readableCost(baseCost, family: Units.family(unitSingle), preferred: unitSingle)
+    }
+
+    /// Las dos caras del precio: por pieza y por peso, cuando se sabe cuánto
+    /// pesa una. Una caja de 7 barras a $7 son $1 la barra y $8.85 el kilo.
+    public var costBreakdown: [(amount: Double, unit: String)] {
+        var out = [displayCost]
+        guard let w = pieceWeight else { return out }
+        let own = Units.family(unitSingle)
+        if own == .conteo {
+            out.append(Units.readableCost(baseCost / w.base, family: w.family, preferred: w.unit))
+        } else if own == w.family {
+            out.append((baseCost * w.base, "unidad"))
         }
-        let options = Units.inFamily(Units.family(unitSingle)).sorted { $0.factor < $1.factor }
-        guard !options.isEmpty else { return (perBase * own.factor, own.short) }
-        let chosen = options.first { perBase * $0.factor >= Ingredient.costMinimum }
-            ?? options[options.count - 1]
-        return (perBase * chosen.factor, chosen.short)
+        return out
+    }
+
+    /// Cuántas unidades base valen UNA de `lineUnit`, y si hubo que dar rodeo.
+    ///
+    /// Es lo que convierte "dos cucharadas" en un costo cuando la leche se
+    /// compró por litros, y "200 g" en un costo cuando la mantequilla se compró
+    /// por barras. `nil` cuando la conversión no se puede hacer sin inventarse
+    /// un dato: de mililitros a gramos hace falta la densidad.
+    public func unitFactor(_ lineUnit: String) -> (factor: Double, via: ConversionVia?)? {
+        let own = Units.family(unitSingle)
+        let li = Units.info(lineUnit)
+        if li.family == own {
+            return (li.factor, lineUnit == unitSingle ? nil : .sameFamily)
+        }
+        guard let w = pieceWeight else { return nil }
+        if own == .conteo && li.family == w.family { return (li.factor / w.base, .piece) }
+        if li.family == .conteo && own == w.family { return (li.factor * w.base, .piece) }
+        return nil
+    }
+
+    /// Lo que cuesta una unidad de `lineUnit` de este ingrediente.
+    public func lineUnitCost(_ lineUnit: String) -> Double? {
+        unitFactor(lineUnit).map { baseCost * $0.factor }
+    }
+
+    /// Qué se convirtió, en palabras. `nil` si no hubo conversión ninguna.
+    public func conversion(to lineUnit: String, qty: Double) -> Conversion? {
+        guard let f = unitFactor(lineUnit), let via = f.via else { return nil }
+        let own = Units.info(unitSingle)
+        // El factor lleva a unidades BASE, así que la equivalencia se dice en
+        // la unidad base de la familia: "30 ml", no "30 L".
+        let base = Units.base(Units.family(unitSingle))
+        let equivale = (qty * f.factor * 1000).rounded() / 1000
+        let texto = "\(Quantity.pretty(qty)) \(Units.info(lineUnit).short) = \(Quantity.pretty(equivale)) \(base.short)"
+        let detalle: String
+        if via == .piece, let w = pieceWeight {
+            detalle = "Compras \(name) por \(own.name), y cada una pesa "
+                + "\(Quantity.pretty(w.amount)) \(Units.info(w.unit).short). Con eso la cuenta sale sola."
+        } else {
+            detalle = "Compras \(name) por \(own.name). Son la misma medida, así que la equivalencia es exacta."
+        }
+        return Conversion(via: via, texto: texto, detalle: detalle)
     }
 
     /// Por debajo de esto el número se ve como "$0.00".
