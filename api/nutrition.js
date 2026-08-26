@@ -162,6 +162,14 @@ const MOTIVOS = {
   'error':         'No pude buscarlo ahora. Puedes escribir los datos a mano.'
 };
 
+/** ¿Se pidió ver el error de dentro? Sólo para diagnosticar a mano. */
+function depurar(req) {
+  try {
+    return new URL(req.url, 'https://olivo-liora.vercel.app')
+      .searchParams.get('debug') === '1';
+  } catch (e) { return false; }
+}
+
 function motivoDelFallo(err) {
   const s = err && err.status;
   if (s === 429) return 'ocupado';
@@ -241,7 +249,8 @@ module.exports = async function handler(req, res) {
     // entera creyendo que el lector estaba roto cuando estaba ocupado.
     return res.status(200).json({ ok: false, motivo: motivo,
                                   mensaje: MOTIVOS[motivo],
-                                  estado: (err && err.status) || 0 });
+                                  estado: (err && err.status) || 0,
+                                  detalle: depurar(req) ? (err && err.detail) || null : undefined });
   }
 };
 
