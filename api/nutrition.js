@@ -76,24 +76,20 @@ REGLAS
    procesar —fruta, verdura, huevo, carne— tiene 0, aunque tenga azúcar propia.
    La fructosa de la fruta va en "azucar", no en "azucarAnadida".
 
-3. "gramosPorPieza": UN solo número, cuánto pesa una pieza mediana comestible,
-   si el alimento se cuenta por piezas. Nunca un rango ("8-12") ni texto
-   ("12 g"): si varía mucho, da el valor típico. Una banana mediana ~118 g, un huevo grande ~50 g, una
+3. "gramosPorPieza": UN número, cuánto pesa una pieza mediana comestible, si
+   el alimento se cuenta por piezas. Una banana mediana ~118 g, un huevo grande ~50 g, una
    fresa ~12 g, un limón ~58 g. Si no se cuenta por piezas (harina, aceite,
    leche), pon null.
 
 4. "esFruta": true para frutas y verduras frescas. El coco es un caso aparte:
    ponlo en false, porque su harina y su aceite casi no llevan azúcar.
 
-5. Todos los valores de por100g son números o null. Nunca texto, nunca rangos,
-   nunca "<1": si algo es menor que 1, escribe ese límite.
-
-6. Si no reconoces el alimento, o el texto no es un alimento, pon
-   esAlimento: false y TODOS los valores de por100g en null. El objeto
-   por100g siempre va presente, aunque esté entero en null. NO te inventes valores: es
+5. Si no reconoces el alimento, o el texto no es un alimento, pon
+   esAlimento: false y todos los valores de por100g en null. NO te inventes
+   valores: es preferible que lo escriba a mano a que se guarde un dato falso. NO te inventes valores: es
    preferible que lo escriba a mano a que se guarde un dato falso.
 
-7. "confianza": alta para alimentos comunes y bien documentados, media si
+6. "confianza": alta para alimentos comunes y bien documentados, media si
    varía mucho según variedad o preparación, baja si dudas.
 
 Responde SÓLO con el JSON del esquema.`;
@@ -112,6 +108,7 @@ async function consultar(nombre, yaReintentado) {
       body: JSON.stringify({
         model: MODEL,
         temperature: 0,
+        max_tokens: 1400,
         messages: [
           { role: 'system', content: PROMPT },
           { role: 'user', content: `Ingrediente: ${nombre}` }
