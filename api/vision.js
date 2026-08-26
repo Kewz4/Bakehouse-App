@@ -81,6 +81,10 @@ const PROMPT = [
   'Reglas:',
   '- Copia los números EXACTAMENTE como aparecen. No conviertas, no calcules,',
   '  no redondees y no completes lo que falte.',
+  '- Cada valor tiene que ser un NÚMERO o null. Nunca texto.',
+  '- Si la etiqueta dice "<1g", "menos de 1 g", "Less than 1g" o parecido,',
+  '  responde con ese límite superior: "<1g" es 1. Nunca escribas "<1".',
+  '- Si dice "trazas", "traces" o "0g*", responde 0.',
   '- "base" es a qué se refieren los números de la tabla: "porcion" si dice',
   '  "por porción" o "cantidad por porción"; "100g" si la tabla es por 100 g',
   '  o por 100 ml.',
@@ -183,6 +187,7 @@ const MOTIVOS = {
   'sin-porcion': 'Leí la tabla, pero no dice cuánto pesa una porción. Escribe primero cuánto trae el paquete y vuelve a intentarlo.',
   'error':       'No pude leer la etiqueta ahora. Puedes escribir los datos a mano.',
   'ocupado':     'Voy muy rápido. Espera unos segundos y toma la foto otra vez.',
+  'rara':        'Esa etiqueta trae algo que no supe leer. Prueba otra foto, o escribe los datos a mano.',
   'sin-llave':   'La lectura por foto no está disponible ahora. Puedes escribir los datos a mano.'
 };
 
@@ -191,6 +196,10 @@ function motivoDelFallo(err) {
   const s = err && err.status;
   if (s === 429) return 'ocupado';
   if (s === 401 || s === 403) return 'sin-llave';
+  // 400 con salida estructurada quiere decir que lo que respondió el modelo no
+  // encajó en el esquema — por ejemplo un "<1" donde tiene que ir un número.
+  // Es un fallo de esta etiqueta concreta, no del servicio.
+  if (s === 400) return 'rara';
   return 'error';
 }
 
