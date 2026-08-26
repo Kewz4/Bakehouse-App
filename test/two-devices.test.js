@@ -624,3 +624,122 @@ test('bajo el título se lee cuántas cosas hay, no un sinónimo del título', a
     await d.close();
   }
 });
+
+// --- Inversión --------------------------------------------------------------
+// Tres cosas distintas que antes eran una sola. Lo que se comprueba aquí es lo
+// que cambiaría los números del negocio si se hiciera mal.
+
+test('la inversión no se resta de la ganancia del mes', async () => {
+  const d = await device();
+  try {
+    const r = await d.page.evaluate(() => {
+      const hoy = new Date().toISOString().slice(0, 10);
+      data.sales = [sello({ id: 'v', date: hoy, product: 'Torta', qty: 1, total: 100 })];
+      data.expenses = [
+        sello({ id: 'g', date: hoy, name: 'Gas', category: 'Servicios', amount: 10, tipo: 'gasto' }),
+        sello({ id: 'b', date: hoy, name: 'Batidora', category: 'Maquinaria', amount: 2000, tipo: 'inversion' })
+      ];
+      save(); render();
+      return { ganancia: document.querySelector('#mProfit').textContent,
+               gastos: document.querySelector('#mExpenses').textContent };
+    });
+    // 100 - 10 = 90. Con la batidora dentro saldría -1910, y un mes bueno
+    // parecería un desastre.
+    assert.match(r.ganancia, /\$90\.00/, 'la ganancia salió ' + r.ganancia);
+    assert.match(r.gastos, /\$10\.00/, 'los gastos operativos salieron ' + r.gastos);
+    assert.deepEqual(d.errors, []);
+  } finally { await d.close(); }
+});
+
+test('un gasto recurrente sigue contando los meses siguientes', async () => {
+  const d = await device();
+  try {
+    const r = await d.page.evaluate(() => {
+      // Anotado hace tres meses, una vez. Tiene que seguir contando hoy.
+      const atras = new Date(); atras.setMonth(atras.getMonth() - 3);
+      const hoy = new Date().toISOString().slice(0, 10);
+      data.sales = [sello({ id: 'v', date: hoy, product: 'Torta', qty: 1, total: 100 })];
+      data.expenses = [sello({ id: 'g', date: atras.toISOString().slice(0, 10),
+        name: 'Internet', category: 'Servicios', amount: 30, tipo: 'recurrente', frecuencia: 'mensual' })];
+      save(); render();
+      return { gastos: document.querySelector('#mExpenses').textContent,
+               ganancia: document.querySelector('#mProfit').textContent };
+    });
+    // Filtrando por su fecha habría desaparecido y la ganancia diría $100.
+    assert.match(r.gastos, /\$30\.00/, 'los gastos salieron ' + r.gastos);
+    assert.match(r.ganancia, /\$70\.00/, 'la ganancia salió ' + r.ganancia);
+  } finally { await d.close(); }
+});
+
+test('la pantalla de Inversión separa lo invertido de lo que se gasta', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => {
+      const hoy = new Date().toISOString().slice(0, 10);
+      data.expenses = [
+        sello({ id: 'b', date: hoy, name: 'Batidora', amount: 2000, tipo: 'inversion', category: 'Maquinaria' }),
+        sello({ id: 'i', date: hoy, name: 'Internet', amount: 30, tipo: 'recurrente', frecuencia: 'mensual', category: 'Servicios' }),
+        sello({ id: 'g', date: hoy, name: 'Gas', amount: 12, tipo: 'gasto', category: 'Servicios' })
+      ];
+      save(); render(); go('expenses');
+    });
+    await d.page.waitForSelector('#expenseRows tr');
+    const n = await d.page.evaluate(() => ({
+      total: document.querySelector('#iTotal').textContent,
+      recurrente: document.querySelector('#iRecurrente').textContent,
+      sueltos: document.querySelector('#iSueltos').textContent
+    }));
+    assert.match(n.total, /\$2,?000\.00/, 'invertido en total: ' + n.total);
+    assert.match(n.recurrente, /\$30\.00/, 'recurrentes: ' + n.recurrente);
+    assert.match(n.sueltos, /\$12\.00/, 'sueltos: ' + n.sueltos);
+    assert.deepEqual(d.errors, []);
+  } finally { await d.close(); }
+});
+
+// --- La calculadora en una ventana ------------------------------------------
+
+test('calcular el precio abre la calculadora con el costo ya puesto', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => {
+      data.ingredients = [sello({ id: 'h', name: 'Harina', unit: 'Bolsa', quantity: 1,
+        price: 8, unitSingle: 'kg' })];
+      data.recipes = [sello({ id: 'r', name: 'Pan', yield: 4, price: 0,
+        ingredients: [{ ingredientId: 'h', qty: 500, unit: 'g', cost: 0.008 }] })];
+      save(); go('recipes'); quickFromRecipe('r');
+    });
+    await d.page.waitForSelector('#mQuickCost');
+
+    // 500 g x $0.008 = $4 la receta, entre 4 porciones = $1 la porción.
+    assert.equal(await d.page.inputValue('#mQuickCost'), '1.00');
+    // Con 65% de margen: 1 / (1 - 0.65) = $2.86
+    assert.match(await d.page.textContent('#mQuickPrice'), /\$2\.86/);
+
+    // Y el precio se puede llevar a la receta sin abrir el editor.
+    await d.page.click('.modal-actions .btn:not(.alt)');
+    await d.page.waitForFunction(() => !document.querySelector('#modal').classList.contains('show'));
+    const precio = await d.page.evaluate(() => data.recipes[0].price);
+    assert.ok(Math.abs(precio - 2.86) < 0.01, 'el precio guardado fue ' + precio);
+    assert.deepEqual(d.errors, []);
+  } finally { await d.close(); }
+});
+
+test('los dos modos de la calculadora dan lo que dicen', async () => {
+  const d = await device();
+  try {
+    await d.page.evaluate(() => { go('recipes'); abrirCalculadora(10, 'Prueba', null); });
+    await d.page.waitForSelector('#mQuickCost');
+
+    // Ganar el 50% del precio: cuesta $10, se cobra $20.
+    await d.page.fill('#mQuickPct', '50');
+    await d.page.dispatchEvent('#mQuickPct', 'input');
+    assert.match(await d.page.textContent('#mQuickPrice'), /\$20\.00/);
+
+    // Sumarle el 50% al costo: se cobra $15. Es la confusión clásica y por eso
+    // están los dos modos.
+    await d.page.click('#mCalcMode button[data-mode=markup]');
+    await d.page.fill('#mQuickPct', '50');
+    await d.page.dispatchEvent('#mQuickPct', 'input');
+    assert.match(await d.page.textContent('#mQuickPrice'), /\$15\.00/);
+  } finally { await d.close(); }
+});

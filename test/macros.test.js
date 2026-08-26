@@ -479,3 +479,77 @@ test('el empaque no aporta macros aunque alguien se los escriba', () => {
                            { caj: caja });
   assert.equal(m.totals.calorias, 0, 'una caja no alimenta a nadie');
 });
+
+// --- Inversión y gastos recurrentes -----------------------------------------
+// La regla que más duele si se hace mal: un gasto recurrente se anota UNA vez
+// y vale para todos los períodos siguientes, pero nunca hacia el futuro.
+
+const dia = (d) => new Date(d + 'T12:00:00');
+
+test('un gasto mensual cuenta una vez por mes desde su fecha', () => {
+  B.fijarAhora(() => new Date('2026-06-15T10:00:00'));
+  const gas = { date: '2026-03-10', amount: 50, tipo: 'recurrente', frecuencia: 'mensual' };
+  assert.equal(B.vecesEnRango(gas, dia('2026-06-01'), dia('2026-06-30')), 1);
+  assert.equal(B.vecesEnRango(gas, dia('2026-03-01'), dia('2026-06-30')), 4);
+  assert.equal(B.vecesEnRango(gas, dia('2026-01-01'), dia('2026-02-28')), 0, 'antes de existir no cuenta');
+  B.fijarAhora(null);
+});
+
+test('nunca cuenta hacia el futuro', () => {
+  // Los períodos de la app terminan en una fecha abierta y muy lejana. Sin
+  // tope, un gasto mensual se contaría miles de veces y la ganancia del mes
+  // saldría catastrófica. Pasó de verdad: 30 x 5000.
+  B.fijarAhora(() => new Date('2026-06-15T10:00:00'));
+  const gas = { date: '2026-03-10', amount: 50, tipo: 'recurrente', frecuencia: 'mensual' };
+  const finAbierto = new Date(2999, 11, 31);
+  assert.equal(B.vecesEnRango(gas, dia('2026-06-01'), finAbierto), 1);
+  assert.equal(B.vecesEnRango(gas, dia('2026-03-01'), finAbierto), 4);
+  B.fijarAhora(null);
+});
+
+test('la cuota que toca hoy sí cuenta', () => {
+  // Las fechas sueltas se normalizan a mediodía para que el huso horario no
+  // las corra un día. Comparando contra la hora exacta, una cuota de hoy
+  // parecía del futuro si eran las nueve de la mañana.
+  B.fijarAhora(() => new Date('2026-06-10T09:00:00'));
+  const gas = { date: '2026-05-10', amount: 50, tipo: 'recurrente', frecuencia: 'mensual' };
+  assert.equal(B.vecesEnRango(gas, dia('2026-06-01'), dia('2026-06-30')), 1);
+  B.fijarAhora(null);
+});
+
+test('un gasto semanal cuenta sus semanas', () => {
+  B.fijarAhora(() => new Date('2026-03-31T23:00:00'));
+  const cajas = { date: '2026-03-02', amount: 20, tipo: 'recurrente', frecuencia: 'semanal' };
+  // 2, 9, 16, 23 y 30 de marzo.
+  assert.equal(B.vecesEnRango(cajas, dia('2026-03-01'), dia('2026-03-31')), 5);
+  assert.equal(B.montoEnRango(cajas, dia('2026-03-01'), dia('2026-03-31')), 100);
+  B.fijarAhora(null);
+});
+
+test('la inversión se cuenta aparte de lo operativo', () => {
+  B.fijarAhora(() => new Date('2026-03-31T23:00:00'));
+  const lista = [
+    { date: '2026-03-10', amount: 2000, tipo: 'inversion' },
+    { date: '2026-03-05', amount: 12, tipo: 'gasto' },
+    { date: '2026-03-01', amount: 30, tipo: 'recurrente', frecuencia: 'mensual' }
+  ];
+  const g = B.desgloseGastos(lista, dia('2026-03-01'), dia('2026-03-31'));
+  assert.equal(g.inversion, 2000);
+  assert.equal(g.sueltos, 12);
+  assert.equal(g.recurrente, 30);
+  // Lo que se resta de la ganancia: los $2000 de la batidora NO están.
+  assert.equal(g.operativo, 42);
+  assert.equal(g.total, 2042);
+  B.fijarAhora(null);
+});
+
+test('sin tipo, un gasto se comporta como siempre', () => {
+  // Todo lo que ya estaba anotado no lleva tipo. Tiene que seguir contando
+  // como el gasto suelto que era.
+  const viejo = { date: '2026-03-05', amount: 40 };
+  assert.equal(B.tipoGasto(viejo), 'gasto');
+  const g = B.desgloseGastos([viejo], dia('2026-03-01'), dia('2026-03-31'));
+  assert.equal(g.sueltos, 40);
+  assert.equal(g.operativo, 40);
+  assert.equal(g.inversion, 0);
+});

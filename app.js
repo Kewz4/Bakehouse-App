@@ -222,7 +222,24 @@ arriba();
 requestAnimationFrame(arriba);
 window.addEventListener('load',arriba,{once:true});
 window.addEventListener('hashchange',()=>go(location.hash.slice(1)))}
-function render(){const sales=data.sales.reduce((a,s)=>a+(+s.total||0),0),production=data.sales.reduce((a,s)=>{let r=data.recipes.find(x=>x.id===s.recipeId);return a+(r?recipeUnitCost(r)*(+s.qty||0):0)},0),expenses=data.expenses.reduce((a,e)=>a+(+e.amount||0),0),profit=sales-production-expenses;$('#mSales').textContent=money(sales);$('#mCost').textContent=money(production);$('#mExpenses').textContent=money(expenses);$('#mProfit').textContent=money(profit);$('#mMargin').textContent=sales?'Te quedan '+Math.round(profit/sales*100)+' centavos de cada dólar':'Aún sin ventas';renderRecipes();renderTables();renderChart(sales);renderAlerts()}
+function render(){
+const sales=data.sales.reduce((a,s)=>a+(+s.total||0),0);
+const production=data.sales.reduce((a,s)=>{let r=data.recipes.find(x=>x.id===s.recipeId);return a+(r?recipeUnitCost(r)*(+s.qty||0):0)},0);
+// Los gastos se calculan sobre la lista ENTERA y con el período a mano, no
+// sobre la lista ya filtrada por fecha: un gasto recurrente se anota una vez y
+// vale para todos los meses siguientes, así que filtrarlo por su fecha lo
+// haría desaparecer del mes que viene y la ganancia saldría mejor de lo que es.
+const {start:d0,end:d1}=periodRange();
+const g=desgloseGastos((window.ALLDATA?window.ALLDATA.expenses:data.expenses)||[],d0,d1);
+// La inversión NO se resta: una batidora de $2000 se compra una vez y trabaja
+// durante años. Restarla del mes haría parecer un desastre un mes que fue bueno.
+const profit=sales-production-g.operativo;
+$('#mSales').textContent=money(sales);
+$('#mCost').textContent=money(production);
+$('#mExpenses').textContent=money(g.operativo);
+$('#mProfit').textContent=money(profit);
+$('#mMargin').textContent=sales?'Te quedan '+Math.round(profit/sales*100)+' centavos de cada dólar':'Aún sin ventas';
+renderRecipes();renderTables();renderChart(sales);renderAlerts()}
 // Filtro por etiqueta de dieta. Vacío = todas.
 let filtroBadge='';
 function setBadgeFilter(k){filtroBadge=(filtroBadge===k)?'':k;renderRecipes()}
@@ -245,6 +262,21 @@ function badgeFilterRow(){
  * antetítulo que decía lo mismo con otras palabras ("Lo que compras" encima de
  * "Ingredientes"). Un recuento sí dice algo que el título no dice.
  */
+/**
+ * Los cuatro números de la pantalla de Inversión.
+ *
+ * "Invertido en total" no mira el período a propósito: lo que él quiere saber
+ * es cuánto lleva puesto en el negocio desde el principio, y eso no cambia
+ * porque se mire un mes u otro.
+ */
+function renderInversion(desde,hasta){
+ const todos=(window.ALLDATA?window.ALLDATA.expenses:data.expenses)||[];
+ const g=desgloseGastos(todos,desde,hasta);
+ const total=todos.filter(x=>tipoGasto(x)==='inversion').reduce((a,x)=>a+(+x.amount||0),0);
+ const set=(sel,v)=>{const el=$(sel);if(el)el.textContent=money(v)};
+ set('#iTotal',total);set('#iPeriodo',g.inversion);
+ set('#iRecurrente',g.recurrente);set('#iSueltos',g.sueltos)}
+
 // Qué categoría se está mirando. Vacío = todas.
 let filtroKind='';
 function setKindFilter(k){filtroKind=filtroKind===k?'':k;renderTables()}
@@ -268,7 +300,50 @@ const fr=$('#badgeFilters');if(fr)fr.innerHTML=badgeFilterRow();
 setCount('#recipeCount',list.length,data.recipes.length,'receta','recetas');
 el.innerHTML=list.length?list.map(r=>{const c=recipeCost(r),u=recipeUnitCost(r),p=recipePrice(r),m=recipeMargin(r),cls=!p?'warn':m>=60?'ok':m>=45?'warn':'bad';return `<article class="recipe">${r.photo?`<img class="recipe-photo" src="${esc(r.photo)}" alt="${esc(r.name)}" loading="lazy">`:''}<span class="tag">${esc(r.yield)} porciones</span><h3>${esc(r.name)}</h3><small>${(r.ingredients||[]).length} ingredientes · costo por porción ${money(u)}</small><div class="recipe-data"><div><span>Costo total</span><b>${money(c)}</b></div><div><span>Precio / porción</span><b>${money(p)}</b></div></div><span class="badge ${cls}">${p?`Ganas ${m.toFixed(0)}% de cada venta`:'Falta ponerle precio'}</span>${p&&m<60?`<p class="helper">Cobrando <b>${money(suggestPrice(r))}</b> ganarías más</p>`:''}${macroSummary(r)}${badgeRow(r)}<div class="recipe-actions"><button onclick="openRecipe('${r.id}')">Editar</button><button onclick="duplicateRecipe('${r.id}')">Duplicar</button><button onclick="quickFromRecipe('${r.id}')">Calcular precio</button><button class="negative" onclick="removeItem('recipes','${r.id}')">Eliminar</button></div></article>`}).join(''):`<div class="empty">${q?'Ninguna receta coincide con tu búsqueda.':'Crea tu primer postre y calcula en un minuto cuánto cobrar.'}</div>`}
 function duplicateRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;data.recipes.push(sello({...r,id:crypto.randomUUID(),name:r.name+' (copia)',ingredients:(r.ingredients||[]).map(i=>({...i}))}));save('Receta duplicada')}
-function quickFromRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;go('recipes');$('#quickCost').value=recipeUnitCost(r).toFixed(2);quickCalc();$('#quickCost').scrollIntoView({behavior:'smooth',block:'center'});toast('Listo: costo de una porción de '+r.name)}
+function quickFromRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;
+ abrirCalculadora(recipeUnitCost(r),r.name,id)}
+
+/**
+ * La calculadora de precio, en una ventana.
+ *
+ * Es la misma de la pantalla de recetas —los mismos dos modos, el mismo
+ * deslizador— para que no haya que aprender dos cosas que hacen lo mismo. Se
+ * abre con el costo de la receta ya puesto, que es el dato que hace falta y
+ * el que nadie se sabe de memoria.
+ */
+let calcReceta=null;
+function abrirCalculadora(costo,nombre,recetaId){
+ calcReceta=recetaId||null;
+ openModal('¿Cuánto cobrar?',`
+  <p class="helper">${nombre?`Una porción de <b>${esc(nombre)}</b> te cuesta <b>${money(costo)}</b>.`:'Escribe cuánto te cuesta una porción.'}</p>
+  <div class="seg" id="mCalcMode">
+   <button class="active" data-mode="margin" onclick="setCalcMode('margin',true)">Ganar % del precio</button>
+   <button data-mode="markup" onclick="setCalcMode('markup',true)">Sumar % al costo</button>
+  </div>
+  <div class="form-grid">
+   <div class="field"><label>Costo por porción ($)</label>
+    <input id="mQuickCost" type="number" inputmode="decimal" min="0" step="0.01" value="${costo.toFixed(2)}" oninput="quickCalc(true)"></div>
+   <div class="field"><label id="mQuickPctLabel">De cada venta quiero ganar (%)</label>
+    <input id="mQuickPct" type="number" inputmode="decimal" min="0" max="99" value="65" oninput="quickCalc(true)"></div>
+  </div>
+  <input id="mQuickSlider" class="slider" type="range" min="0" max="95" value="65" oninput="$('#mQuickPct').value=this.value;quickCalc(true)">
+  <div class="calc-result pop"><span id="mQuickCaption">Precio mínimo recomendado</span><strong id="mQuickPrice">$0.00</strong></div>
+  <p class="calc-warning" id="mQuickNote"></p>
+  <div class="modal-actions">
+   <button class="btn alt" onclick="closeModal()">Cerrar</button>
+   ${recetaId?`<button class="btn" onclick="guardarPrecioCalculado()">Ponerle este precio</button>`:''}
+  </div>`);
+ setCalcMode(calcMode,true)}
+
+/** Lleva el precio calculado a la receta, sin tener que abrir el editor. */
+function guardarPrecioCalculado(){
+ const r=data.recipes.find(x=>x.id===calcReceta);if(!r)return;
+ const precio=+($('#mQuickPrice').textContent||'').replace(/[^0-9.]/g,'')||0;
+ if(!(precio>0))return toast('Escribe primero el costo.',true);
+ const actualizada=sello({...r,price:+precio.toFixed(2)});
+ data.recipes=data.recipes.map(x=>x.id===r.id?actualizada:x);
+ save('Precio de '+r.name+' actualizado');closeModal()}
+
 function renderTables(){
 const qs=(($('#saleSearch')||{}).value||'').toLowerCase().trim();
 const sl=data.sales.filter(x=>!qs||(x.product||'').toLowerCase().includes(qs));
@@ -276,10 +351,27 @@ $('#salesRows').innerHTML=sl.map(x=>{const r=data.recipes.find(r=>r.id===x.recip
 $('#salesEmpty').style.display=sl.length?'none':'block';
 setCount('#saleCount',sl.length,data.sales.length,'venta','ventas');
 const qe=(($('#expenseSearch')||{}).value||'').toLowerCase().trim();
-const ex=data.expenses.filter(x=>!qe||(x.name||'').toLowerCase().includes(qe)||(x.category||'').toLowerCase().includes(qe));
-$('#expenseRows').innerHTML=ex.map(x=>`<tr><td data-label="Fecha">${fmtDate(x.date)}</td><td class="main"><b>${esc(x.name)}</b></td><td data-label="Categoría"><span class="chip">${esc(x.category)}</span></td><td class="amount negative" data-label="Monto">${money(x.amount)}</td><td class="actions"><button class="icon-btn" onclick="openExpense('${x.id}')" aria-label="Editar gasto">✎</button><button class="icon-btn" onclick="removeItem('expenses','${x.id}')" aria-label="Eliminar gasto">×</button></td></tr>`).join('');
+const {start:desdeE,end:hastaE}=periodRange();
+// Los recurrentes no se filtran por fecha: se anotan una vez y siguen valiendo.
+const ex=(window.ALLDATA?window.ALLDATA.expenses:data.expenses).filter(x=>
+  (!qe||(x.name||'').toLowerCase().includes(qe)||(x.category||'').toLowerCase().includes(qe))&&
+  (tipoGasto(x)==='recurrente'?montoEnRango(x,desdeE,hastaE)>0||true:montoEnRango(x,desdeE,hastaE)>0));
+$('#expenseRows').innerHTML=ex.map(x=>{
+ const t=tipoGasto(x), info=TIPOS_GASTO.find(z=>z.k===t)||TIPOS_GASTO[0];
+ const veces=t==='recurrente'?vecesEnRango(x,desdeE,hastaE):1;
+ const enRango=montoEnRango(x,desdeE,hastaE);
+ const detalle=t==='recurrente'
+  ? `${(FRECUENCIAS.find(f=>f.k===frecuenciaDe(x))||FRECUENCIAS[1]).n}${veces?` · ${veces}x aquí`:''}`
+  : esc(x.category||'');
+ return `<tr><td data-label="Fecha">${fmtDate(x.date)}</td><td class="main"><b>${esc(x.name)}</b></td>`+
+  `<td data-label="Tipo"><span class="chip tipo-${t}">${esc(info.n)}</span><small class="sub">${detalle}</small></td>`+
+  `<td class="amount ${t==='inversion'?'':'negative'}" data-label="Monto">${money(enRango||x.amount)}`+
+  `${veces>1?`<small class="sub">${money(x.amount)} cada vez</small>`:''}</td>`+
+  `<td class="actions"><button class="icon-btn" onclick="openExpense('${x.id}')" aria-label="Editar">✎</button>`+
+  `<button class="icon-btn" onclick="removeItem('expenses','${x.id}')" aria-label="Eliminar">×</button></td></tr>`}).join('');
 $('#expensesEmpty').style.display=ex.length?'none':'block';
-setCount('#expenseCount',ex.length,data.expenses.length,'gasto','gastos');
+setCount('#expenseCount',ex.length,ex.length,'movimiento','movimientos');
+renderInversion(desdeE,hastaE);
 const qi=(($('#ingSearch')||{}).value||'').toLowerCase().trim();
 const ing=data.ingredients.filter(x=>(!qi||(x.name||'').toLowerCase().includes(qi))&&
   (!filtroKind||kindOf(x)===filtroKind));
@@ -670,38 +762,108 @@ const rec=sello({id:id||crypto.randomUUID(),date,product,total,qty,recipeId});
 if(id)data.sales=data.sales.map(x=>x.id===id?rec:x);else data.sales.unshift(rec);
 data.sales.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
 save(id?'Venta actualizada':'Venta registrada');closeModal()}
-function openExpense(id){const g=data.expenses.find(x=>x.id===id)||{date:new Date().toISOString().slice(0,10),name:'',category:'Servicios',amount:''};
-const cats=['Servicios','Transporte','Empaque','Ingredientes','Marketing','Mano de obra','Otro'];
-openModal(id?'Editar gasto':'Registrar gasto',`<div class="form-grid">${field('Fecha','eDate','date',g.date)}${field('Concepto','eName','text',esc(g.name),'placeholder="ej. Gas para horno"')}<div class="field"><label>Categoría</label><select id="eCategory">${cats.map(c=>`<option ${g.category===c?'selected':''}>${c}</option>`).join('')}</select></div>${field('Monto ($)','eAmount','number',g.amount,'min="0" step="0.01" inputmode="decimal"')}</div><div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="addExpense('${id||''}')">Guardar gasto</button></div>`)}
+function openExpense(id){const g=data.expenses.find(x=>x.id===id)||
+ {date:new Date().toISOString().slice(0,10),name:'',category:'Servicios',amount:'',tipo:'gasto'};
+const cats=['Servicios','Transporte','Empaque','Ingredientes','Marketing','Mano de obra','Maquinaria','Otro'];
+const tipo=tipoGasto(g);
+openModal(id?'Editar':'Registrar',`
+ <div class="kind-tabs" role="tablist">${TIPOS_GASTO.map(t=>`
+  <button type="button" role="tab" class="${t.k===tipo?'active':''}" data-tipo="${t.k}" onclick="pickTipo(this)">${esc(t.n)}</button>`).join('')}
+  <input type="hidden" id="eTipo" value="${tipo}"></div>
+ <p class="helper" id="tipoAyuda">${esc((TIPOS_GASTO.find(t=>t.k===tipo)||TIPOS_GASTO[0]).d)}</p>
+ <div class="form-grid">
+  ${field('Fecha','eDate','date',g.date)}
+  ${field('Concepto','eName','text',esc(g.name),'placeholder="ej. Gas para horno"')}
+  <div class="field"><label>Categoría</label><select id="eCategory">${cats.map(c=>`<option ${g.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
+  ${field('Monto ($)','eAmount','number',g.amount,'min="0" step="0.01" inputmode="decimal"')}
+ </div>
+ <div class="field" id="frecuenciaCampo" style="${tipo==='recurrente'?'':'display:none'}">
+  <label>¿Cada cuánto se repite?</label>
+  <select id="eFrecuencia">${FRECUENCIAS.map(f=>`<option value="${f.k}" ${frecuenciaDe(g)===f.k?'selected':''}>${esc(f.n)}</option>`).join('')}</select>
+  <small class="helper">Se anota una vez y se cuenta solo cada período, desde la fecha de arriba. No hay que volver a escribirlo cada mes.</small>
+ </div>
+ <div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="addExpense('${id||''}')">Guardar</button></div>`)}
+
+function pickTipo(btn){
+ document.querySelectorAll('.kind-tabs button[data-tipo]').forEach(b=>b.classList.toggle('active',b===btn));
+ const t=btn.dataset.tipo;
+ $('#eTipo').value=t;
+ const info=TIPOS_GASTO.find(z=>z.k===t)||TIPOS_GASTO[0];
+ $('#tipoAyuda').textContent=info.d;
+ $('#frecuenciaCampo').style.display=t==='recurrente'?'':'none'}
+
 function addExpense(id){const name=$('#eName').value.trim(),amount=+$('#eAmount').value;
 if(!name||!(amount>0))return toast('Completa el concepto y el monto.',true);
-const rec=sello({id:id||crypto.randomUUID(),date:$('#eDate').value,name,category:$('#eCategory').value,amount});
+const tipo=$('#eTipo').value||'gasto';
+const rec=sello({id:id||crypto.randomUUID(),date:$('#eDate').value,name,
+ category:$('#eCategory').value,amount,tipo,
+ frecuencia:tipo==='recurrente'?($('#eFrecuencia').value||'mensual'):undefined});
 if(id)data.expenses=data.expenses.map(x=>x.id===id?rec:x);else data.expenses.unshift(rec);
 data.expenses.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
-save(id?'Gasto actualizado':'Gasto registrado');closeModal()}
+save(id?'Actualizado':'Registrado');closeModal()}
 function removeItem(type,id){if(!confirm('¿Borrar esto? No se puede deshacer.'))return;
 data[type]=data[type].filter(x=>x.id!==id);
 // La lápida es lo que impide que el registro reaparezca desde el otro dispositivo.
 graves[type]=graves[type].filter(x=>x.id!==id).concat([S.tombstone(id)]);
 save('Registro eliminado')}
 let calcMode='margin';
-function setCalcMode(m){calcMode=m;document.querySelectorAll('#calcMode button').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
-$('#quickPctLabel').textContent=m==='margin'?'De cada venta quiero ganar (%)':'Al costo le sumo (%)';
-const inp=$('#quickMargin');inp.max=m==='margin'?99:1000;if(m==='markup'&&+inp.value===65)inp.value=100;if(m==='margin'&&+inp.value>99)inp.value=65;quickCalc()}
-function quickCalc(){const cost=Math.max(0,+$('#quickCost').value||0),note=$('#quickNote');let pct=+$('#quickMargin').value;if(!isFinite(pct))pct=0;let msg='',warn=false;
-if(calcMode==='markup'){if(pct<0){pct=0;$('#quickMargin').value=0}
-const price=cost*(1+pct/100),eq=price?(price-cost)/price*100:0;
-$('#quickCaption').textContent=`Precio cobrando ${pct}% sobre el costo`;$('#quickPrice').textContent=money(price);
-msg=cost?`Ganas ${money(price-cost)} por porción: ${eq.toFixed(0)} centavos de cada dólar que cobras.`:'Escribe cuánto te cuesta una porción.';}
-else{if(pct>=100){pct=99;$('#quickMargin').value=99;msg='Para ganar el 100% del precio, hacer el postre tendría que costarte $0. Lo dejé en 99%. Si lo que quieres es cobrar el doble de lo que te cuesta, toca “Sumar % al costo” y escribe 100.';warn=true}
-else if(pct<0){pct=0;$('#quickMargin').value=0}
-const price=cost/(1-pct/100);
-$('#quickCaption').textContent='Precio mínimo recomendado';$('#quickPrice').textContent=money(price);
-if(!msg){if(pct>=90){msg='Es un precio alto. Revisa que la gente lo siga comprando.';warn=true}
-else if(cost&&pct&&pct<40){msg='Ganas poco. Recuerda sumar el gas, las cajas y tu tiempo.';warn=true}
-else if(cost)msg=`Ganas ${money(price-cost)} por porción.`;
-else msg='Escribe cuánto te cuesta una porción.';}}
-note.className='calc-warning'+(warn?'':' info');note.textContent=msg}
+/**
+ * La calculadora de precio. Vive en dos sitios —la pantalla de recetas y la
+ * ventana que se abre desde una receta— y es la MISMA: los mismos dos modos,
+ * el mismo deslizador, los mismos avisos. Cambian sólo los identificadores de
+ * los campos, así que se pasan como parámetro en vez de escribirla dos veces.
+ */
+const CALC_IDS={
+ fija:  {cost:'#quickCost', pct:'#quickMargin', slider:'#quickSlider', label:'#quickPctLabel',
+         caption:'#quickCaption', price:'#quickPrice', note:'#quickNote', modes:'#calcMode'},
+ modal: {cost:'#mQuickCost', pct:'#mQuickPct', slider:'#mQuickSlider', label:'#mQuickPctLabel',
+         caption:'#mQuickCaption', price:'#mQuickPrice', note:'#mQuickNote', modes:'#mCalcMode'}
+};
+const calcIds=enModal=>CALC_IDS[enModal?'modal':'fija'];
+
+function setCalcMode(m,enModal){calcMode=m;
+ const id=calcIds(enModal);
+ document.querySelectorAll(id.modes+' button').forEach(b=>b.classList.toggle('active',b.dataset.mode===m));
+ const et=$(id.label);
+ if(et)et.textContent=m==='margin'?'De cada venta quiero ganar (%)':'Al costo le sumo (%)';
+ const inp=$(id.pct);if(!inp)return;
+ inp.max=m==='margin'?99:1000;
+ if(m==='markup'&&+inp.value===65)inp.value=100;
+ if(m==='margin'&&+inp.value>99)inp.value=65;
+ const sl=$(id.slider);if(sl){sl.max=m==='margin'?95:300;sl.value=Math.min(+inp.value,+sl.max)}
+ quickCalc(enModal)}
+
+function quickCalc(enModal){
+ const id=calcIds(enModal);
+ const campoCosto=$(id.cost);if(!campoCosto)return;
+ const cost=Math.max(0,+campoCosto.value||0),note=$(id.note);
+ const inp=$(id.pct);
+ let pct=+inp.value;if(!isFinite(pct))pct=0;
+ let msg='',warn=false;
+
+ if(calcMode==='markup'){
+  if(pct<0){pct=0;inp.value=0}
+  const price=cost*(1+pct/100),eq=price?(price-cost)/price*100:0;
+  $(id.caption).textContent=`Precio cobrando ${pct}% sobre el costo`;
+  $(id.price).textContent=money(price);
+  msg=cost?`Ganas ${money(price-cost)} por porción: ${eq.toFixed(0)} centavos de cada dólar que cobras.`
+          :'Escribe cuánto te cuesta una porción.';
+ }else{
+  if(pct>=100){pct=99;inp.value=99;
+   msg='Para ganar el 100% del precio, hacer el postre tendría que costarte $0. Lo dejé en 99%. Si querías cobrar el doble de lo que te cuesta, usa la otra opción.';warn=true}
+  else if(pct<0){pct=0;inp.value=0}
+  const price=cost/(1-pct/100);
+  $(id.caption).textContent='Precio mínimo recomendado';
+  $(id.price).textContent=money(price);
+  if(!msg){
+   if(pct>=90){msg='Es un precio alto. Revisa que la gente lo siga comprando.';warn=true}
+   else if(cost&&pct&&pct<40){msg='Ganas poco. Recuerda sumar el gas, las cajas y tu tiempo.';warn=true}
+   else if(cost)msg=`Ganas ${money(price-cost)} por porción.`;
+   else msg='Escribe cuánto te cuesta una porción.';}
+ }
+ const sl=$(id.slider);if(sl&&+sl.value!==pct)sl.value=Math.min(pct,+sl.max);
+ note.className='calc-warning'+(warn?'':' info');note.textContent=msg}
+
 let deferredPrompt;
 const standalone=window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredPrompt=e;showInstall('Agrega Olivo & Liora a tu pantalla de inicio y ábrela como cualquier app.',true)});
@@ -745,7 +907,7 @@ $('#stats').innerHTML=`<div class="row"><span class="dot"></span><div class="gro
 <div class="row"><span class="dot"></span><div class="grow"><b>Porciones vendidas</b><small>En total</small></div><span class="amount">${unidades}</span></div>
 <div class="row"><span class="dot"></span><div class="grow"><b>Tu mejor venta</b><small>${top?esc(top.product):'Sin ventas aún'}</small></div><span class="amount">${top?money(top.total):'—'}</span></div>`;
 renderTopProducts();
-const profitEl=$('#mProfit');const profit=total-data.sales.reduce((a,x)=>{const r=data.recipes.find(y=>y.id===x.recipeId);return a+(r?recipeUnitCost(r)*(+x.qty||0):0)},0)-data.expenses.reduce((a,x)=>a+(+x.amount||0),0);
+const profitEl=$('#mProfit');const profit=total-data.sales.reduce((a,x)=>{const r=data.recipes.find(y=>y.id===x.recipeId);return a+(r?recipeUnitCost(r)*(+x.qty||0):0)},0)-desgloseGastos(all.expenses,start,end).operativo;
 profitEl.style.color=profit<0?'var(--red)':'var(--ink)';$('#mMargin').className=profit<0?'':'';$('#mMargin').style.color=profit<0?'var(--red)':'';
 }finally{data.sales=all.sales;data.expenses=all.expenses}};
 loadLocal();nav();render();setCalcMode('margin');bootSync();checarVision();

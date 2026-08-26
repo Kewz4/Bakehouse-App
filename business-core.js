@@ -430,6 +430,10 @@ const tipoGasto=x=>{const t=x&&x.tipo;
  return TIPOS_GASTO.some(z=>z.k===t)?t:'gasto'};
 const frecuenciaDe=x=>(x&&x.frecuencia)==='semanal'?'semanal':'mensual';
 
+// Se pasa por aquí para poder fijar "hoy" en las pruebas sin tocar el reloj.
+let ahoraFn=()=>new Date();
+function fijarAhora(fn){ahoraFn=fn||(()=>new Date())}
+
 /** Una fecha suelta a medianoche, sin que el huso horario la corra un día. */
 function fechaDe(v){
  if(v instanceof Date)return isNaN(v)?null:v;
@@ -446,9 +450,20 @@ function fechaDe(v){
  */
 function vecesEnRango(x,desde,hasta){
  const inicio=fechaDe(x&&x.date);
- if(!inicio||!desde||!hasta||hasta<desde)return 0;
+ if(!inicio||!desde||!hasta)return 0;
+
+ // Nunca hacia el futuro: el internet del mes que viene todavía no se ha
+ // pagado. Importa más de lo que parece — los períodos de la app terminan en
+ // una fecha abierta y muy lejana, así que sin este tope un gasto mensual se
+ // contaría miles de veces y la ganancia saldría catastrófica.
+ // El final de HOY, no el instante actual: las fechas sueltas se normalizan a
+ // mediodía para que el huso horario no las corra un día, y comparar contra la
+ // hora exacta dejaba fuera la cuota que toca hoy mismo.
+ const hoy=ahoraFn();
+ const ahora=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate(),23,59,59,999);
  const fin=fechaDe(x&&x.hasta);
- const tope=fin&&fin<hasta?fin:hasta;
+ let tope=hasta<ahora?hasta:ahora;
+ if(fin&&fin<tope)tope=fin;
  if(tope<desde||inicio>tope)return 0;
 
  let n=0;
@@ -659,5 +674,5 @@ return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS
         countLabel:countLabel, joinDetail:joinDetail,
         TIPOS_GASTO:TIPOS_GASTO, FRECUENCIAS:FRECUENCIAS, tipoGasto:tipoGasto,
         frecuenciaDe:frecuenciaDe, vecesEnRango:vecesEnRango, montoEnRango:montoEnRango,
-        desgloseGastos:desgloseGastos};
+        desgloseGastos:desgloseGastos, fijarAhora:fijarAhora};
 });

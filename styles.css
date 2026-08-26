@@ -255,3 +255,29 @@ body.pad-open .tabbar{opacity:0;pointer-events:none}
     .brand img{display:block;height:44px;width:auto}
     .brand small{margin-top:7px}
     @media(max-width:760px){.brand img{height:34px}}
+
+    /* ===== Inversión y calculadora ===== */
+    /* Los cuatro números de la pantalla de Inversión. */
+    .inversion-metrics{margin-bottom:18px}
+    .chip.tipo-inversion{background:#f0e4e0;color:var(--burgundy)}
+    .chip.tipo-recurrente{background:#efeee0;color:var(--olivo)}
+    .chip.tipo-gasto{background:#f0e9e1;color:var(--muted)}
+    .table .sub{display:block;color:var(--muted);font-size:11px;font-weight:600;margin-top:3px}
+    /* El deslizador del margen: el mismo en la pantalla y en la ventana. */
+    .slider{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:6px;
+      background:linear-gradient(90deg,var(--sage),var(--burgundy));margin:14px 0 4px;outline:0}
+    .slider::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;
+      background:var(--burgundy);border:3px solid #fff;box-shadow:0 2px 8px #5705074d;cursor:pointer}
+    .slider::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--burgundy);
+      border:3px solid #fff;cursor:pointer}
+    /* El resultado entra con un salto corto: se nota que cambió sin marear. */
+    .calc-result.pop{animation:calcPop .3s cubic-bezier(.2,1.3,.4,1)}
+    @keyframes calcPop{from{opacity:0;transform:translateY(8px) scale(.97)}to{opacity:1;transform:none}}
+    .calc-result strong{transition:color .2s}
+    .grid.one{grid-template-columns:1fr}
+    /* La ventana entra desde abajo, como las demás. */
+    .modal.show .dialog{animation:dialogUp .26s cubic-bezier(.2,1.1,.35,1)}
+    @keyframes dialogUp{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+    @media(prefers-reduced-motion:reduce){
+      .calc-result.pop,.modal.show .dialog,.conv{animation:none}
+    }
