@@ -39,7 +39,7 @@ const SCHEMA = {
     // Siempre por 100 g de producto crudo y comestible, que es la referencia
     // en la que están publicadas las tablas de composición de alimentos.
     por100g: {
-      type: ['object', 'null'],
+      type: 'object',
       properties: {
         calorias: { type: ['number', 'null'] },
         proteina: { type: ['number', 'null'] },
@@ -89,7 +89,8 @@ REGLAS
    nunca "<1": si algo es menor que 1, escribe ese límite.
 
 6. Si no reconoces el alimento, o el texto no es un alimento, pon
-   esAlimento: false y por100g en null. NO te inventes valores: es
+   esAlimento: false y TODOS los valores de por100g en null. El objeto
+   por100g siempre va presente, aunque esté entero en null. NO te inventes valores: es
    preferible que lo escriba a mano a que se guarde un dato falso.
 
 7. "confianza": alta para alimentos comunes y bien documentados, media si
