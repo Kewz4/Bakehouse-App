@@ -107,7 +107,7 @@ const PROMPT = [
   '- Si la foto no es una tabla nutricional, encontrado=false y todo en null.'
 ].join('\n');
 
-async function askGroq(mime, base64, signal) {
+async function askGroq(mime, base64, signal, yaReintentado) {
   const res = await fetch(ENDPOINT, {
     method: 'POST',
     signal,
@@ -147,7 +147,7 @@ async function askGroq(mime, base64, signal) {
       const espera = res.status === 400 ? 0 : segundosDeEspera(res, detail);
       console.warn('vision: límite de peticiones, reintentando en', espera, 's');
       await new Promise(r => setTimeout(r, espera * 1000));
-      return leerEtiqueta(mime, base64, true);
+      return askGroq(mime, base64, signal, true);
     }
     throw err;
   }
