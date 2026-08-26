@@ -141,8 +141,10 @@ async function askGroq(mime, base64, signal) {
     // ella fotografía tres ingredientes seguidos y el segundo y el tercero se
     // caen. Se espera lo que diga el servidor y se reintenta una vez, porque
     // lo que ella ve es una etiqueta que no se lee sin razón aparente.
-    if (res.status === 429 && !yaReintentado) {
-      const espera = segundosDeEspera(res, detail);
+    // Igual que el 429: un 400 es que la respuesta del modelo no encajó en el
+    // esquema, y no es determinista. Se reintenta una vez.
+    if ((res.status === 429 || res.status === 400) && !yaReintentado) {
+      const espera = res.status === 400 ? 0 : segundosDeEspera(res, detail);
       console.warn('vision: límite de peticiones, reintentando en', espera, 's');
       await new Promise(r => setTimeout(r, espera * 1000));
       return leerEtiqueta(mime, base64, true);

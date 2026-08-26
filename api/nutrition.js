@@ -125,8 +125,12 @@ async function consultar(nombre, yaReintentado) {
       const err = new Error('groq ' + res.status);
       err.status = res.status;
       err.detail = detail.slice(0, 300);
-      if (res.status === 429 && !yaReintentado) {
-        const espera = Math.min(
+      // Un 400 aquí es que la respuesta del modelo no encajó en el esquema, y
+      // no es determinista: la misma consulta pasa o falla según la vez. Un
+      // solo reintento convierte casi todas, y sin él ella vería fallar una
+      // fruta de cada tres sin ninguna razón visible.
+      if ((res.status === 429 || res.status === 400) && !yaReintentado) {
+        const espera = res.status === 400 ? 0 : Math.min(
           parseFloat(res.headers.get('retry-after'))
             || (parseFloat((/try again in ([\d.]+)\s*s/i.exec(detail || '') || [])[1]) + 0.3)
             || 3, 8);
