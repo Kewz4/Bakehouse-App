@@ -196,7 +196,13 @@ padPreview()}
 function padPreview(){if(!padTarget)return;
 const n=parseQty(padTarget.value),u=padUnitLabel(padTarget);
 document.getElementById('padPreview').textContent=n?`${prettyQty(n)} ${u}`.trim():'Escribe una cantidad';}
-document.addEventListener('click',e=>{const pad=document.getElementById('pad');
+// Se cierra con `pointerdown`, no con `click`, y eso importa: al abrirse, el
+// teclado empuja el contenido para que el campo no quede debajo, y el `click`
+// termina cayendo en otro sitio del que empezó. Con `click` ese aterrizaje
+// contaba como "tocó fuera" y cerraba el teclado que el mismo dedo acababa de
+// abrir. Con `pointerdown` el gesto se juzga ANTES de que el teclado exista, así
+// que ya no puede cerrar lo que él mismo abrió.
+document.addEventListener('pointerdown',e=>{const pad=document.getElementById('pad');
 if(!pad||!pad.classList.contains('show'))return;
 if(pad.contains(e.target)||e.target===padTarget)return;
 if(e.target.dataset&&e.target.dataset.pad!=null)return;
@@ -207,7 +213,11 @@ function unitOptions(selected,family,excluir){return Object.entries(UNITS)
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmtDate=d=>{if(!d)return '—';const m=String(d).match(/^(\d{4})-(\d{2})-(\d{2})/);return m?`${m[3]}/${m[2]}/${m[1].slice(2)}`:d};
 let toastTimer;function toast(msg,isError){const t=$('#toast');t.textContent=msg;t.className='show'+(isError?' err':'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='',isError?4200:2400)}
-function go(view){if(!document.getElementById(view))view='dashboard';document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===view));$('#fab').dataset.view=view;window.scrollTo({top:0,behavior:'smooth'});try{history.replaceState(null,'','#'+view)}catch(e){}}
+// En qué pantallas tiene sentido preguntar "¿de cuándo?". Las recetas y los
+// ingredientes son un catálogo: no cambian porque cambie el mes.
+const VISTAS_CON_PERIODO=['dashboard','sales','expenses'];
+function go(view){if(!document.getElementById(view))view='dashboard';document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===view));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===view));$('#fab').dataset.view=view;
+const pp=$('#periodPanel');if(pp)pp.style.display=VISTAS_CON_PERIODO.includes(view)?'':'none';window.scrollTo({top:0,behavior:'smooth'});try{history.replaceState(null,'','#'+view)}catch(e){}}
 function fabAction(){({dashboard:openSale,recipes:openRecipe,sales:openSale,expenses:openExpense,inventory:openIngredient}[$('#fab').dataset.view||'dashboard'])()}
 function nav(){document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>go(b.dataset.view));
 go((location.hash||'#dashboard').slice(1));
@@ -274,8 +284,14 @@ function renderInversion(desde,hasta){
  const g=desgloseGastos(todos,desde,hasta);
  const total=todos.filter(x=>tipoGasto(x)==='inversion').reduce((a,x)=>a+(+x.amount||0),0);
  const set=(sel,v)=>{const el=$(sel);if(el)el.textContent=money(v)};
+ const inicio=desdeElInicio(todos);
  set('#iTotal',total);set('#iPeriodo',g.inversion);
- set('#iRecurrente',g.recurrente);set('#iSueltos',g.sueltos)}
+ set('#iRecurrente',g.recurrente);set('#iSueltos',g.sueltos);
+ set('#iDesdeInicio',inicio.total);
+ const nota=$('#iDesdeInicioNota');
+ if(nota)nota.textContent=inicio.desde
+  ? 'Todo, desde el '+fmtDate(inicio.desde.toISOString().slice(0,10))
+  : 'Todavía no hay nada anotado'}
 
 // Qué categoría se está mirando. Vacío = todas.
 let filtroKind='';
@@ -360,13 +376,16 @@ $('#expenseRows').innerHTML=ex.map(x=>{
  const t=tipoGasto(x), info=TIPOS_GASTO.find(z=>z.k===t)||TIPOS_GASTO[0];
  const veces=t==='recurrente'?vecesEnRango(x,desdeE,hastaE):1;
  const enRango=montoEnRango(x,desdeE,hastaE);
+ // "2 × $1.25" cuando compró varios, y "$2.50 cada vez" cuando además se repite.
+ const sub=joinDetail([cantidadDe(x)>1?`${prettyQty(cantidadDe(x))} × ${money(x.amount)}`:null,
+                       veces>1?`${money(montoBase(x))} cada vez`:null]);
  const detalle=t==='recurrente'
   ? `${(FRECUENCIAS.find(f=>f.k===frecuenciaDe(x))||FRECUENCIAS[1]).n}${veces?` · ${veces}x aquí`:''}`
   : esc(x.category||'');
  return `<tr><td data-label="Fecha">${fmtDate(x.date)}</td><td class="main"><b>${esc(x.name)}</b></td>`+
   `<td data-label="Tipo"><span class="chip tipo-${t}">${esc(info.n)}</span><small class="sub">${detalle}</small></td>`+
   `<td class="amount ${t==='inversion'?'':'negative'}" data-label="Monto">${money(enRango||x.amount)}`+
-  `${veces>1?`<small class="sub">${money(x.amount)} cada vez</small>`:''}</td>`+
+  `${sub?`<small class="sub">${esc(sub)}</small>`:''}</td>`+
   `<td class="actions"><button class="icon-btn" onclick="openExpense('${x.id}')" aria-label="Editar">✎</button>`+
   `<button class="icon-btn" onclick="removeItem('expenses','${x.id}')" aria-label="Eliminar">×</button></td></tr>`}).join('');
 $('#expensesEmpty').style.display=ex.length?'none':'block';
@@ -775,14 +794,28 @@ openModal(id?'Editar':'Registrar',`
   ${field('Fecha','eDate','date',g.date)}
   ${field('Concepto','eName','text',esc(g.name),'placeholder="ej. Gas para horno"')}
   <div class="field"><label>Categoría</label><select id="eCategory">${cats.map(c=>`<option ${g.category===c?'selected':''}>${c}</option>`).join('')}</select></div>
-  ${field('Monto ($)','eAmount','number',g.amount,'min="0" step="0.01" inputmode="decimal"')}
+  ${field('Precio de uno ($)','eAmount','number',g.amount,'min="0" step="0.01" inputmode="decimal" oninput="renderGastoPreview()"')}
+  ${field('¿Cuántos?','eCantidad','text',cantidadDe(g)>1?prettyQty(cantidadDe(g)):'','readonly data-pad="1" placeholder="1" onfocus="openPad(this)" onclick="openPad(this)" oninput="renderGastoPreview()"')}
  </div>
+ <div id="gastoPreview" class="preview"></div>
  <div class="field" id="frecuenciaCampo" style="${tipo==='recurrente'?'':'display:none'}">
   <label>¿Cada cuánto se repite?</label>
   <select id="eFrecuencia">${FRECUENCIAS.map(f=>`<option value="${f.k}" ${frecuenciaDe(g)===f.k?'selected':''}>${esc(f.n)}</option>`).join('')}</select>
   <small class="helper">Se anota una vez y se cuenta solo cada período, desde la fecha de arriba. No hay que volver a escribirlo cada mes.</small>
  </div>
- <div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="addExpense('${id||''}')">Guardar</button></div>`)}
+ <div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cancelar</button><button class="btn" onclick="addExpense('${id||''}')">Guardar</button></div>`);
+renderGastoPreview()}
+
+/** El total a la vista mientras escribe: dos rollos a $1.25 son $2.50. */
+function renderGastoPreview(){
+ const el=$('#gastoPreview');if(!el)return;
+ const precio=+($('#eAmount')||{}).value||0;
+ const cuantos=parseQty(($('#eCantidad')||{}).value||'')||1;
+ if(!(precio>0)){el.innerHTML='';el.style.display='none';return}
+ el.style.display='';
+ el.innerHTML=cuantos>1
+  ? `<b>${money(precio*cuantos)}</b> en total · ${prettyQty(cuantos)} × ${money(precio)}`
+  : `<b>${money(precio)}</b>`}
 
 function pickTipo(btn){
  document.querySelectorAll('.kind-tabs button[data-tipo]').forEach(b=>b.classList.toggle('active',b===btn));
@@ -795,8 +828,9 @@ function pickTipo(btn){
 function addExpense(id){const name=$('#eName').value.trim(),amount=+$('#eAmount').value;
 if(!name||!(amount>0))return toast('Completa el concepto y el monto.',true);
 const tipo=$('#eTipo').value||'gasto';
+const cantidad=parseQty($('#eCantidad').value||'')||1;
 const rec=sello({id:id||crypto.randomUUID(),date:$('#eDate').value,name,
- category:$('#eCategory').value,amount,tipo,
+ category:$('#eCategory').value,amount,cantidad,tipo,
  frecuencia:tipo==='recurrente'?($('#eFrecuencia').value||'mensual'):undefined});
 if(id)data.expenses=data.expenses.map(x=>x.id===id?rec:x);else data.expenses.unshift(rec);
 data.expenses.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
@@ -880,18 +914,80 @@ if(!navigator.onLine)document.body.classList.add('offline');
 if('serviceWorker'in navigator)window.addEventListener('load',()=>{navigator.serviceWorker.register('sw.js').then(reg=>{reg.addEventListener('updatefound',()=>{const w=reg.installing;w&&w.addEventListener('statechange',()=>{if(w.state==='installed'&&navigator.serviceWorker.controller)toast('Hay mejoras nuevas. Cierra y vuelve a abrir la app.')})})}).catch(()=>{})});
 // Filtros de período: los datos siguen siendo locales hasta conectar una base remota.
 const baseRender=render;
-function periodRange(){const f=($('#periodFilter')||{}).value||'month',now=new Date();let start=new Date(now),end=new Date('2999-12-31T23:59:59');
-if(f==='day')start.setHours(0,0,0,0);
-else if(f==='week'){start.setDate(now.getDate()-((now.getDay()+6)%7));start.setHours(0,0,0,0)}
-else if(f==='month'){start.setDate(1);start.setHours(0,0,0,0)}
-else if(f==='quarter'){start.setMonth(Math.floor(now.getMonth()/3)*3,1);start.setHours(0,0,0,0)}
-else if(f==='semester'){start.setMonth(now.getMonth()<6?0:6,1);start.setHours(0,0,0,0)}
-else if(f==='year'){start.setMonth(0,1);start.setHours(0,0,0,0)}
-else if(f==='all')start=new Date('1900-01-01T00:00:00');
-else if(f==='custom'){const from=($('#filterFrom')||{}).value,to=($('#filterTo')||{}).value;start=new Date((from||'1900-01-01')+'T00:00:00');if(to)end=new Date(to+'T23:59:59')}
-$('#customDates').style.display=f==='custom'?'grid':'none';
-const sel=$('#periodFilter')&&$('#periodFilter').selectedOptions[0];
-return{start,end,label:sel?sel.textContent:''}}
+// Cuántos períodos atrás (o adelante) se está mirando. Cero es el de ahora.
+// Existe para poder decir "y en agosto, ¿cómo nos fue?" sin escribir fechas.
+let periodoOffset=0;
+
+/** Mueve el período uno atrás o uno adelante. Nunca más allá del actual. */
+function moverPeriodo(paso){
+ const f=($('#periodFilter')||{}).value||'month';
+ if(f==='all'||f==='custom')return;
+ periodoOffset=Math.min(0,periodoOffset+paso);
+ render()}
+
+/** Al cambiar de tipo de período se vuelve al de ahora. */
+function cambiarPeriodo(){periodoOffset=0;render()}
+
+const MESES=['enero','febrero','marzo','abril','mayo','junio','julio',
+             'agosto','septiembre','octubre','noviembre','diciembre'];
+const mayus=t=>t.charAt(0).toUpperCase()+t.slice(1);
+
+/**
+ * De qué fechas se está hablando.
+ *
+ * El final ya no es una fecha abierta y lejanísima, sino el final de verdad del
+ * período: así "agosto" es agosto y no "agosto en adelante". Lo que se repite
+ * solo sigue sin contarse hacia el futuro — de eso se encarga vecesEnRango.
+ */
+function periodRange(){
+ const f=($('#periodFilter')||{}).value||'month';
+ const hoy=new Date();
+ const o=periodoOffset;
+ let start,end,label;
+ const finDe=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate(),23,59,59,999);
+
+ if(f==='day'){
+  start=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()+o);
+  end=finDe(start);
+  label=o===0?'Hoy':o===-1?'Ayer':`${start.getDate()} de ${MESES[start.getMonth()]}`;
+ }else if(f==='week'){
+  const lunes=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()-((hoy.getDay()+6)%7)+o*7);
+  start=lunes;end=finDe(new Date(lunes.getFullYear(),lunes.getMonth(),lunes.getDate()+6));
+  label=o===0?'Esta semana':`Semana del ${start.getDate()} de ${MESES[start.getMonth()]}`;
+ }else if(f==='month'){
+  start=new Date(hoy.getFullYear(),hoy.getMonth()+o,1);
+  end=finDe(new Date(start.getFullYear(),start.getMonth()+1,0));
+  label=mayus(MESES[start.getMonth()])+(start.getFullYear()!==hoy.getFullYear()?' '+start.getFullYear():'');
+ }else if(f==='quarter'){
+  const t=Math.floor(hoy.getMonth()/3)+o;
+  start=new Date(hoy.getFullYear(),t*3,1);
+  end=finDe(new Date(start.getFullYear(),start.getMonth()+3,0));
+  label=`Trimestre: ${MESES[start.getMonth()]} a ${MESES[end.getMonth()]}`;
+ }else if(f==='semester'){
+  const sem=(hoy.getMonth()<6?0:1)+o;
+  start=new Date(hoy.getFullYear(),sem*6,1);
+  end=finDe(new Date(start.getFullYear(),start.getMonth()+6,0));
+  label=`Semestre: ${MESES[start.getMonth()]} a ${MESES[end.getMonth()]}`;
+ }else if(f==='year'){
+  start=new Date(hoy.getFullYear()+o,0,1);
+  end=finDe(new Date(start.getFullYear(),11,31));
+  label=String(start.getFullYear());
+ }else if(f==='custom'){
+  const from=($('#filterFrom')||{}).value,to=($('#filterTo')||{}).value;
+  start=new Date((from||'1900-01-01')+'T00:00:00');
+  end=to?new Date(to+'T23:59:59'):finDe(hoy);
+  label='Fechas elegidas';
+ }else{
+  start=new Date('1900-01-01T00:00:00');end=finDe(hoy);label='Desde el inicio';
+ }
+
+ const cd=$('#customDates');if(cd)cd.style.display=f==='custom'?'grid':'none';
+ const et=$('#periodLabel');if(et)et.textContent=label;
+ // No se puede ir más allá del período de ahora: no hay datos del futuro.
+ const mover=$('#periodMover');
+ if(mover)mover.style.display=(f==='all'||f==='custom')?'none':'';
+ const sig=$('#periodNext');if(sig)sig.disabled=periodoOffset>=0;
+ return{start,end,label}}
 render=function(){const{start,end,label}=periodRange();const all={sales:data.sales,expenses:data.expenses};window.ALLDATA=all;
 const inRange=d=>{const t=new Date(String(d).length<=10?String(d)+'T12:00:00':d);return !isNaN(t)&&t>=start&&t<=end};
 data.sales=all.sales.filter(x=>inRange(x.date));data.expenses=all.expenses.filter(x=>inRange(x.date));

@@ -146,7 +146,14 @@ public struct Ingredient: RecordBacked, Hashable, Sendable {
         // la unidad base de la familia: "30 ml", no "30 L".
         let base = Units.base(Units.family(unitSingle))
         let equivale = (qty * f.factor * 1000).rounded() / 1000
-        let texto = "\(Quantity.pretty(qty)) \(Units.info(lineUnit).short) = \(Quantity.pretty(equivale)) \(base.short)"
+        let izq = "\(Quantity.pretty(qty)) \(Units.info(lineUnit).short)"
+        let der = "\(Quantity.pretty(equivale)) \(base.short)"
+        // "80 g = 80 g" es verdad y no sirve de nada. Pasa cuando la receta ya
+        // pide la unidad base de la familia: la conversión existe —la harina se
+        // compró en libras— pero la frase no la enseña, y un aviso que no dice
+        // nada acaba enseñando a ignorar los avisos que sí dicen algo.
+        if izq == der { return nil }
+        let texto = "\(izq) = \(der)"
         let detalle: String
         if via == .piece, let w = pieceWeight {
             detalle = "Compras \(name) por \(own.name), y cada una pesa "
@@ -313,6 +320,22 @@ public struct Expense: RecordBacked, Hashable, Sendable {
     public var amount: Double {
         get { record.double("amount") } set { record["amount"] = .number(newValue) }
     }
+
+    /// Cuántos se compraron. Un rollo de papel pergamino vale $1.25 y ella
+    /// compra dos: el gasto son $2.50, pero el precio anotado sigue siendo
+    /// $1.25. Lo anotado antes de que existiera este campo vale uno, así que
+    /// los números de siempre siguen dando lo mismo.
+    public var cantidad: Double {
+        get {
+            guard record["cantidad"] != nil else { return 1 }
+            let n = record.double("cantidad")
+            return n > 0 ? n : 1
+        }
+        set { record["cantidad"] = .number(newValue) }
+    }
+
+    /// Lo que costó de verdad: el precio de uno por cuántos se llevaron.
+    public var montoBase: Double { amount * cantidad }
 }
 
 // MARK: - Fechas

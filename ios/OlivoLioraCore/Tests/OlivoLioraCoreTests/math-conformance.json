@@ -1363,6 +1363,54 @@
       "via": null,
       "lineCost": null,
       "texto": null
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Harina",
+          "quantity": 5,
+          "price": 6.5,
+          "unitSingle": "lb"
+        },
+        "unit": "g",
+        "qty": 80
+      },
+      "factor": 1,
+      "via": "misma-familia",
+      "lineCost": 0.002866011746238911,
+      "texto": null
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Leche",
+          "quantity": 1,
+          "price": 2,
+          "unitSingle": "l"
+        },
+        "unit": "ml",
+        "qty": 250
+      },
+      "factor": 1,
+      "via": "misma-familia",
+      "lineCost": 0.002,
+      "texto": null
+    },
+    {
+      "in": {
+        "ing": {
+          "name": "Limón",
+          "quantity": 10,
+          "price": 3,
+          "unitSingle": "u"
+        },
+        "unit": "u",
+        "qty": 0.5
+      },
+      "factor": 1,
+      "via": null,
+      "lineCost": 0.3,
+      "texto": null
     }
   ],
   "macroBasis": [
@@ -1495,6 +1543,96 @@
       "fruta": false
     }
   ],
+  "gastos": {
+    "hoy": "2026-03-15",
+    "cantidades": [
+      {
+        "in": {
+          "id": "g1",
+          "date": "2026-01-10",
+          "name": "Batidora",
+          "amount": 120,
+          "tipo": "inversion"
+        },
+        "cantidad": 1,
+        "montoBase": 120
+      },
+      {
+        "in": {
+          "id": "g2",
+          "date": "2026-01-10",
+          "name": "Molde",
+          "amount": 6.75,
+          "cantidad": 4,
+          "tipo": "inversion"
+        },
+        "cantidad": 4,
+        "montoBase": 27
+      },
+      {
+        "in": {
+          "id": "g3",
+          "date": "2026-01-15",
+          "name": "Papel pergamino",
+          "amount": 1.25,
+          "cantidad": 2,
+          "tipo": "recurrente",
+          "frecuencia": "semanal"
+        },
+        "cantidad": 2,
+        "montoBase": 2.5
+      },
+      {
+        "in": {
+          "id": "g4",
+          "date": "2026-02-01",
+          "name": "Gas",
+          "amount": 30,
+          "tipo": "recurrente",
+          "frecuencia": "mensual"
+        },
+        "cantidad": 1,
+        "montoBase": 30
+      },
+      {
+        "in": {
+          "id": "g5",
+          "date": "2026-02-20",
+          "name": "Cajas",
+          "amount": 0.4,
+          "cantidad": 50,
+          "tipo": "gasto"
+        },
+        "cantidad": 50,
+        "montoBase": 20
+      },
+      {
+        "in": {
+          "id": "g6",
+          "date": "2026-03-14",
+          "name": "Sin cantidad",
+          "amount": 9,
+          "tipo": "gasto"
+        },
+        "cantidad": 1,
+        "montoBase": 9
+      }
+    ],
+    "mes": {
+      "operativo": 44,
+      "inversion": 0,
+      "recurrente": 35,
+      "sueltos": 9,
+      "total": 44
+    },
+    "inicio": {
+      "operativo": 111.5,
+      "inversion": 147,
+      "recurrente": 82.5,
+      "sueltos": 29,
+      "total": 258.5
+    }
+  },
   "recipe": [
     {
       "in": {

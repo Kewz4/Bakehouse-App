@@ -128,7 +128,26 @@ final class MathConformanceTests: XCTestCase {
         let costBreakdown: [BreakdownCase]
         let unitFactor: [FactorCase]
         let macroBasis: [BasisCase]
+        struct GastosCase: Decodable {
+            struct Entrada: Decodable {
+                let id: String; let date: String; let name: String
+                let amount: Double; let cantidad: Double?
+                let tipo: String; let frecuencia: String?
+            }
+            struct CantidadCase: Decodable {
+                let `in`: Entrada; let cantidad: Double; let montoBase: Double
+            }
+            struct Desglose: Decodable {
+                let operativo: Double; let inversion: Double
+                let recurrente: Double; let sueltos: Double; let total: Double
+            }
+            let hoy: String
+            let cantidades: [CantidadCase]
+            let mes: Desglose
+            let inicio: Desglose
+        }
         let kindOf: [KindCase]
+        let gastos: GastosCase
         let countLabel: [CountCase]
         let joinDetail: [JoinCase]
         let recipe: [RecipeCase]
@@ -425,5 +444,50 @@ final class MathConformanceTests: XCTestCase {
             XCTAssertEqual(ing.kind.rawValue, c.kind, "«\(c.in.name)»")
             XCTAssertEqual(ing.isFruit, c.fruta, "«\(c.in.name)»: fruta")
         }
+    }
+
+    /// Un gasto puede llevar cantidad: dos rollos de papel a $1.25 son $2.50.
+    /// Lo anotado antes de que el campo existiera vale uno.
+    func testExpenseQuantityMatchesJavaScript() throws {
+        for c in try load().gastos.cantidades {
+            let g = gasto(c.in)
+            XCTAssertEqual(g.cantidad, c.cantidad, accuracy: 1e-9, "«\(c.in.name)»: cantidad")
+            XCTAssertEqual(g.montoBase, c.montoBase, accuracy: 1e-9, "«\(c.in.name)»: monto")
+        }
+    }
+
+    /// El reparto de un período y el acumulado desde que empezó el negocio.
+    /// "Hoy" se fija: si no, el fixture cambiaría de un día para otro.
+    func testExpenseBreakdownMatchesJavaScript() throws {
+        let f = try load().gastos
+        let gastos = f.cantidades.map { gasto($0.in) }
+        let hoy = try XCTUnwrap(Investment.parse(f.hoy))
+        Investment.withNow(hoy) {
+            let desde = Investment.parse("2026-03-01")!
+            let hasta = Investment.parse("2999-12-31")!
+            comprobar(Investment.breakdown(gastos, from: desde, to: hasta), f.mes, "mes")
+            comprobar(Investment.sinceTheStart(gastos), f.inicio, "desde el inicio")
+        }
+    }
+
+    private func gasto(_ e: Fixtures.GastosCase.Entrada) -> Expense {
+        var g = Expense(record: Record(["id": .string(e.id)]))
+        g.date = e.date
+        g.name = e.name
+        g.amount = e.amount
+        if let c = e.cantidad { g.cantidad = c }
+        g.record["tipo"] = .string(e.tipo)
+        if let f = e.frecuencia { g.record["frecuencia"] = .string(f) }
+        return g
+    }
+
+    private func comprobar(_ salio: ExpenseBreakdown,
+                           _ esperado: Fixtures.GastosCase.Desglose,
+                           _ que: String) {
+        XCTAssertEqual(salio.investment, esperado.inversion, accuracy: 0.005, "\(que): inversión")
+        XCTAssertEqual(salio.recurring,  esperado.recurrente, accuracy: 0.005, "\(que): recurrente")
+        XCTAssertEqual(salio.oneOff,     esperado.sueltos,    accuracy: 0.005, "\(que): sueltos")
+        XCTAssertEqual(salio.operating,  esperado.operativo,  accuracy: 0.005, "\(que): operativo")
+        XCTAssertEqual(salio.total,      esperado.total,      accuracy: 0.005, "\(que): total")
     }
 }

@@ -125,7 +125,7 @@ public enum Investment {
 
     /// Cuánto suma un gasto dentro de un período.
     public static func amount(of expense: Expense, from desde: Date, to hasta: Date) -> Double {
-        let monto = expense.amount
+        let monto = expense.montoBase
         guard expense.kind == .recurrente else {
             guard let d = parse(expense.date), d >= desde, d <= hasta else { return 0 }
             return monto
@@ -155,6 +155,25 @@ public enum Investment {
     /// saber es cuánto lleva puesto en el negocio, y eso no cambia porque se
     /// mire un mes u otro.
     public static func investedEver(_ expenses: [Expense]) -> Double {
-        expenses.filter { $0.kind == .inversion }.reduce(0) { $0 + $1.amount }
+        expenses.filter { $0.kind == .inversion }.reduce(0) { $0 + $1.montoBase }
+    }
+
+    /// Todo lo que lleva puesto el negocio desde que empezó.
+    ///
+    /// No es lo mismo que la inversión: la inversión es la batidora y los
+    /// moldes, lo que se compra una vez y se queda. Esto es TODO — también
+    /// cada rollo de papel que se ha ido comprando semana tras semana desde el
+    /// primer día. Es la pregunta de "¿cuánto llevamos metido aquí?".
+    ///
+    /// El principio es la fecha del gasto más viejo, no una fecha fija: el
+    /// negocio empezó cuando empezó. El final es hoy, de lo que ya se encarga
+    /// `occurrences`.
+    public static func sinceTheStart(_ expenses: [Expense]) -> ExpenseBreakdown {
+        let fechas = expenses.compactMap { parse($0.date) }
+        guard let desde = fechas.min() else { return ExpenseBreakdown() }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: 0) ?? .current
+        let hasta = cal.date(bySettingHour: 23, minute: 59, second: 59, of: now()) ?? now()
+        return breakdown(expenses, from: desde, to: hasta)
     }
 }

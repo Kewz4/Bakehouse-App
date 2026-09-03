@@ -63,7 +63,25 @@ const conversiones = [
   { ing: conPeso[3], unit: 'u',    qty: 1 },     // sin peso por pieza: imposible
   { ing: conPeso[4], unit: 'u',    qty: 3 },     // gramos -> piezas
   { ing: conPeso[5], unit: 'g',    qty: 50 },    // peso por pieza inválido
-  { ing: conPeso[6], unit: 'g',    qty: 50 }     // "cada unidad pesa 3 unidades"
+  { ing: conPeso[6], unit: 'g',    qty: 50 },    // "cada unidad pesa 3 unidades"
+  // Los dos que NO deben enseñar badge: la frase saldría "80 g = 80 g", que es
+  // verdad y no dice nada.
+  { ing: { name: 'Harina', quantity: 5, price: 6.5, unitSingle: 'lb' }, unit: 'g',  qty: 80 },
+  { ing: { name: 'Leche',  quantity: 1, price: 2,   unitSingle: 'l'  }, unit: 'ml', qty: 250 },
+  // Medio limón: se cuenta por unidades y la mitad tiene que salir.
+  { ing: { name: 'Limón',  quantity: 10, price: 3,  unitSingle: 'u'  }, unit: 'u',  qty: 0.5 }
+];
+
+// Gastos con cantidad, y el acumulado desde que empezó el negocio. La fecha de
+// "hoy" se fija para que el fixture no cambie de un día para otro.
+const HOY = '2026-03-15';
+const gastos = [
+  { id: 'g1', date: '2026-01-10', name: 'Batidora',        amount: 120,  tipo: 'inversion' },
+  { id: 'g2', date: '2026-01-10', name: 'Molde',           amount: 6.75, cantidad: 4, tipo: 'inversion' },
+  { id: 'g3', date: '2026-01-15', name: 'Papel pergamino', amount: 1.25, cantidad: 2, tipo: 'recurrente', frecuencia: 'semanal' },
+  { id: 'g4', date: '2026-02-01', name: 'Gas',             amount: 30,   tipo: 'recurrente', frecuencia: 'mensual' },
+  { id: 'g5', date: '2026-02-20', name: 'Cajas',           amount: 0.4,  cantidad: 50, tipo: 'gasto' },
+  { id: 'g6', date: '2026-03-14', name: 'Sin cantidad',    amount: 9,    tipo: 'gasto' }
 ];
 
 // De qué se habla cuando se habla de macros: por 100 g, o por pieza.
@@ -267,6 +285,19 @@ const out = {
     return { in: u, amount: b.amount, unit: b.unit, etiqueta: b.etiqueta, factor: b.factor };
   }),
   kindOf: categorias.map(i => ({ in: i, kind: B.kindOf(i), fruta: B.esFruta(i) })),
+  gastos: (() => {
+    B.fijarAhora(() => new Date(HOY + 'T12:00:00Z'));
+    const desde = new Date('2026-03-01T00:00:00Z');
+    const hasta = new Date('2999-12-31T23:59:59Z');
+    const out = {
+      hoy: HOY,
+      cantidades: gastos.map(g => ({ in: g, cantidad: B.cantidadDe(g), montoBase: B.montoBase(g) })),
+      mes: B.desgloseGastos(gastos, desde, hasta),
+      inicio: (() => { const r = B.desdeElInicio(gastos); return { ...r, desde: undefined } })()
+    };
+    B.fijarAhora(null);
+    return out;
+  })(),
   recipe: recipes.map(r => ({
     in: r,
     totalCost: B.recipeCost(r),
@@ -281,6 +312,8 @@ console.log('parseQty:%d prettyQty:%d baseCost:%d recipe:%d macroRecipes:%d -> %
   out.parseQty.length, out.prettyQty.length, out.baseCost.length, out.recipe.length,
   out.macroRecipes.length, path.relative(process.cwd(), OUT));
 console.log('badgeRecipes:%d countLabel:%d joinDetail:%d', out.badgeRecipes.length, out.countLabel.length, out.joinDetail.length);
+console.log('gastos: cantidades:%d mes:%s inicio:%s',
+  out.gastos.cantidades.length, out.gastos.mes.total.toFixed(2), out.gastos.inicio.total.toFixed(2));
 console.log('escala:%d costBreakdown:%d unitFactor:%d macroBasis:%d kindOf:%d',
   out.displayCostEscala.length, out.costBreakdown.length, out.unitFactor.length,
   out.macroBasis.length, out.kindOf.length);

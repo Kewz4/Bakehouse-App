@@ -196,8 +196,15 @@ function conversionInfo(ing,lineUnit,qty){
  const base=baseUnit(unitFamily(propiaKey));
  const equivale=n*f.factor;
  const w=unitWeight(ing);
+ const izq=prettyQty(n)+' '+unitInfo(lineUnit).s;
+ const der=prettyQty(+equivale.toFixed(3))+' '+base.s;
+ // "80 g = 80 g" es verdad y no sirve de nada. Pasa cuando la receta ya pide
+ // la unidad base de la familia (gramos, mililitros): la conversión existe
+ // —la harina se compró en libras— pero la frase no la enseña, y un aviso que
+ // no dice nada acaba enseñando a ignorar los avisos que sí dicen algo.
+ if(izq===der)return null;
  return {via:f.via,
-  texto:prettyQty(n)+' '+unitInfo(lineUnit).s+' = '+prettyQty(+equivale.toFixed(3))+' '+base.s,
+  texto:izq+' = '+der,
   detalle:f.via==='pieza'&&w
    ? 'Compras '+(ing.name||'esto')+' por '+propia.n+', y cada una pesa '+prettyQty(w.amount)+' '+w.short+'. Con eso la cuenta sale sola.'
    : 'Compras '+(ing.name||'esto')+' por '+propia.n+'. Son la misma medida, así que la equivalencia es exacta.'}}
@@ -479,9 +486,25 @@ function vecesEnRango(x,desde,hasta){
  }
  return n}
 
+/**
+ * Cuántos se compraron. Un rollo de papel pergamino vale $1.25 y ella compra
+ * dos: el gasto son $2.50, pero el precio que anotó —y el que reconocerá la
+ * próxima vez— sigue siendo $1.25.
+ *
+ * Lo anotado antes de que existiera este campo no lleva cantidad, y vale uno:
+ * así los números de siempre siguen dando lo mismo.
+ */
+function cantidadDe(x){
+ const n=+((x&&x.cantidad)!=null?x.cantidad:1);
+ return isFinite(n)&&n>0?n:1}
+
+/** Lo que costó de verdad: el precio de uno por cuántos se llevaron. */
+function montoBase(x){
+ return (+((x&&x.amount)||0)||0)*cantidadDe(x)}
+
 /** Cuánto suma un gasto dentro de un período. */
 function montoEnRango(x,desde,hasta){
- const monto=+((x&&x.amount)||0)||0;
+ const monto=montoBase(x);
  if(tipoGasto(x)!=='recurrente'){
   const d=fechaDe(x&&x.date);
   return d&&d>=desde&&d<=hasta?monto:0}
@@ -504,6 +527,28 @@ function desgloseGastos(lista,desde,hasta){
   else out.sueltos+=monto});
  out.operativo=out.sueltos+out.recurrente;
  out.total=out.operativo+out.inversion;
+ return out}
+
+/**
+ * Todo lo que lleva puesto el negocio desde que empezó.
+ *
+ * No es lo mismo que la inversión: la inversión es la batidora y los moldes,
+ * lo que se compra una vez y se queda. Esto es TODO — la batidora, los moldes,
+ * y también cada rollo de papel que se ha ido comprando semana tras semana
+ * desde el primer día. Es la pregunta de "¿cuánto llevamos metido aquí?".
+ *
+ * El principio es la fecha del gasto más viejo que haya anotado, no una fecha
+ * fija: el negocio empezó cuando empezó. Y el final es hoy, nunca el futuro —
+ * de eso ya se encarga vecesEnRango.
+ */
+function desdeElInicio(lista){
+ const fechas=(lista||[]).map(x=>fechaDe(x&&x.date)).filter(Boolean);
+ if(!fechas.length)return {operativo:0,inversion:0,recurrente:0,sueltos:0,total:0,desde:null};
+ const desde=new Date(Math.min.apply(null,fechas.map(d=>d.getTime())));
+ const hoy=ahoraFn();
+ const hasta=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate(),23,59,59,999);
+ const out=desgloseGastos(lista,desde,hasta);
+ out.desde=desde;
  return out}
 
 // ---------------------------------------------------------------------------
@@ -674,5 +719,7 @@ return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS
         countLabel:countLabel, joinDetail:joinDetail,
         TIPOS_GASTO:TIPOS_GASTO, FRECUENCIAS:FRECUENCIAS, tipoGasto:tipoGasto,
         frecuenciaDe:frecuenciaDe, vecesEnRango:vecesEnRango, montoEnRango:montoEnRango,
-        desgloseGastos:desgloseGastos, fijarAhora:fijarAhora};
+        cantidadDe:cantidadDe, montoBase:montoBase,
+        desgloseGastos:desgloseGastos, desdeElInicio:desdeElInicio,
+        fijarAhora:fijarAhora};
 });
