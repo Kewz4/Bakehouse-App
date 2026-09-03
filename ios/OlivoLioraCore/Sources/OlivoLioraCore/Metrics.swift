@@ -8,56 +8,99 @@ public enum Period: String, CaseIterable, Identifiable, Sendable {
 
     public var label: String {
         switch self {
-        case .day: return "Hoy"
-        case .week: return "Esta semana"
-        case .month: return "Este mes"
-        case .quarter: return "Trimestre"
-        case .semester: return "Semestre"
-        case .year: return "Año"
-        case .all: return "Todo"
-        case .custom: return "Personalizado"
+        case .day: return "Por día"
+        case .week: return "Por semana"
+        case .month: return "Por mes"
+        case .quarter: return "Por trimestre"
+        case .semester: return "Por semestre"
+        case .year: return "Por año"
+        case .all: return "Desde el inicio"
+        case .custom: return "Fechas que yo elija"
         }
     }
 
+    /// Los meses en español, para poder decir "Agosto" y no "August".
+    static let meses = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
+                        "agosto", "septiembre", "octubre", "noviembre", "diciembre"]
+
+    /// De qué fechas se habla, y cómo se llama eso.
+    ///
+    /// `offset` es cuántos períodos atrás: 0 el de ahora, -1 el anterior. El
+    /// final es el final DE VERDAD del período: antes "agosto" significaba
+    /// "agosto en adelante" y por eso mirar atrás no servía de nada, todos los
+    /// meses daban el mismo número. Lo que se repite solo sigue sin contarse
+    /// hacia el futuro, de eso se encarga `Investment.occurrences`.
+    ///
     /// La semana empieza en lunes, como en la web (`(getDay()+6)%7`).
-    public func range(now: Date = Date(), from: Date? = nil, to: Date? = nil) -> ClosedRange<Date> {
+    public func span(now: Date = Date(), offset: Int = 0,
+                     from: Date? = nil, to: Date? = nil) -> (range: ClosedRange<Date>, label: String) {
         var cal = Calendar(identifier: .gregorian)
         cal.timeZone = TimeZone.current
         cal.firstWeekday = 2
-        let far = cal.date(from: DateComponents(year: 2999, month: 12, day: 31)) ?? now
+        let o = min(0, offset)
         let startOfDay = cal.startOfDay(for: now)
-
-        func startOf(month: Int, year: Int) -> Date {
+        func finDe(_ d: Date) -> Date {
+            cal.date(bySettingHour: 23, minute: 59, second: 59, of: d) ?? d
+        }
+        func inicioDe(month: Int, year: Int) -> Date {
             cal.date(from: DateComponents(year: year, month: month, day: 1)) ?? startOfDay
         }
-        let comps = cal.dateComponents([.year, .month], from: now)
-        let year = comps.year ?? 2026
-        let month = comps.month ?? 1
+        func mayus(_ t: String) -> String { t.prefix(1).uppercased() + t.dropFirst() }
+        let comps = cal.dateComponents([.year, .month, .day], from: now)
+        let year = comps.year ?? 2026, month = comps.month ?? 1
+        let mesDe = { (d: Date) in Period.meses[(cal.component(.month, from: d)) - 1] }
 
         switch self {
         case .day:
-            return startOfDay...far
+            let d = cal.date(byAdding: .day, value: o, to: startOfDay) ?? startOfDay
+            let et = o == 0 ? "Hoy" : (o == -1 ? "Ayer"
+                     : "\(cal.component(.day, from: d)) de \(mesDe(d))")
+            return (d...finDe(d), et)
         case .week:
             let weekday = (cal.component(.weekday, from: now) + 5) % 7  // lunes = 0
-            let start = cal.date(byAdding: .day, value: -weekday, to: startOfDay) ?? startOfDay
-            return start...far
+            let base = cal.date(byAdding: .day, value: -weekday, to: startOfDay) ?? startOfDay
+            let start = cal.date(byAdding: .day, value: o * 7, to: base) ?? base
+            let end = finDe(cal.date(byAdding: .day, value: 6, to: start) ?? start)
+            let et = o == 0 ? "Esta semana"
+                     : "Semana del \(cal.component(.day, from: start)) de \(mesDe(start))"
+            return (start...end, et)
         case .month:
-            return startOf(month: month, year: year)...far
+            let start = cal.date(byAdding: .month, value: o,
+                                 to: inicioDe(month: month, year: year)) ?? startOfDay
+            let end = finDe(cal.date(byAdding: DateComponents(month: 1, day: -1), to: start) ?? start)
+            let anio = cal.component(.year, from: start)
+            return (start...end, mayus(mesDe(start)) + (anio != year ? " \(anio)" : ""))
         case .quarter:
-            return startOf(month: ((month - 1) / 3) * 3 + 1, year: year)...far
+            let base = inicioDe(month: ((month - 1) / 3) * 3 + 1, year: year)
+            let start = cal.date(byAdding: .month, value: o * 3, to: base) ?? base
+            let end = finDe(cal.date(byAdding: DateComponents(month: 3, day: -1), to: start) ?? start)
+            return (start...end, "Trimestre: \(mesDe(start)) a \(mesDe(end))")
         case .semester:
-            return startOf(month: month <= 6 ? 1 : 7, year: year)...far
+            let base = inicioDe(month: month <= 6 ? 1 : 7, year: year)
+            let start = cal.date(byAdding: .month, value: o * 6, to: base) ?? base
+            let end = finDe(cal.date(byAdding: DateComponents(month: 6, day: -1), to: start) ?? start)
+            return (start...end, "Semestre: \(mesDe(start)) a \(mesDe(end))")
         case .year:
-            return startOf(month: 1, year: year)...far
+            let start = inicioDe(month: 1, year: year + o)
+            let end = finDe(cal.date(from: DateComponents(year: year + o, month: 12, day: 31)) ?? start)
+            return (start...end, "\(year + o)")
         case .all:
-            return (cal.date(from: DateComponents(year: 1900, month: 1, day: 1)) ?? startOfDay)...far
+            let start = cal.date(from: DateComponents(year: 1900, month: 1, day: 1)) ?? startOfDay
+            return (start...finDe(startOfDay), "Desde el inicio")
         case .custom:
             let start = from.map { cal.startOfDay(for: $0) }
                 ?? cal.date(from: DateComponents(year: 1900, month: 1, day: 1)) ?? startOfDay
-            let end = to.map { cal.date(byAdding: .day, value: 1, to: cal.startOfDay(for: $0))?
-                .addingTimeInterval(-1) ?? $0 } ?? far
-            return start...max(start, end)
+            let end = to.map { finDe($0) } ?? finDe(startOfDay)
+            return (start...max(start, end), "Fechas elegidas")
         }
+    }
+
+    /// Los que se pueden mover atrás y adelante. "Desde el inicio" no tiene un
+    /// anterior.
+    public var movible: Bool { self != .all && self != .custom }
+
+    public func range(now: Date = Date(), from: Date? = nil, to: Date? = nil) -> ClosedRange<Date> {
+        span(now: now, offset: 0, from: from, to: to).range
     }
 }
 
@@ -73,6 +116,10 @@ public struct Metrics: Sendable {
     /// Lo invertido en este período, y desde el principio.
     public var investmentPeriod: Double = 0
     public var investmentEver: Double = 0
+    /// Todo lo puesto en el negocio desde el primer día, no sólo la maquinaria.
+    public var spentEver: Double = 0
+    /// La fecha del gasto más viejo: cuándo empezó esto de verdad.
+    public var startedOn: Date?
     public var recurringTotal: Double = 0
     public var oneOffTotal: Double = 0
     public var profit: Double = 0
@@ -148,6 +195,9 @@ public enum Analytics {
         m.expensesTotal = g.operating
         m.investmentPeriod = g.investment
         m.investmentEver = Investment.investedEver(todos)
+        let inicio = Investment.sinceTheStart(todos)
+        m.spentEver = inicio.total
+        m.startedOn = todos.compactMap { Investment.parse($0.date) }.min()
         m.recurringTotal = g.recurring
         m.oneOffTotal = g.oneOff
         // La inversión NO se resta: una batidora se compra una vez y trabaja

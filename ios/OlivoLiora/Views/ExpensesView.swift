@@ -23,10 +23,8 @@ struct ExpensesView: View {
     var body: some View {
         ListScaffold(
             title: "Inversión",
-            detail: Labels.join(
-                store.period.label,
-                Labels.count(shown: filtered.count, total: filtered.count,
-                             singular: "movimiento", plural: "movimientos")),
+            detail: Labels.count(shown: filtered.count, total: filtered.count,
+                                 singular: "movimiento", plural: "movimientos"),
             searchPrompt: "Buscar…",
             search: $search,
             addLabel: "Registrar",
@@ -36,6 +34,8 @@ struct ExpensesView: View {
                 ? "Aquí van tus gastos y tus inversiones: el gas, las cajas, y también la batidora."
                 : "Nada coincide con tu búsqueda."
         ) {
+            PeriodBar().plainRow()
+
             totals.plainRow()
 
             ForEach(filtered) { expense in
@@ -94,16 +94,25 @@ struct ExpensesView: View {
     /// cambia porque se mire un mes u otro.
     private var totals: some View {
         let m = store.metrics
-        return LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
-                                   GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        return VStack(spacing: 10) {
+            // La respuesta a "¿cuánto llevamos metido aquí?" va sola y a lo
+            // ancho: es la pregunta, no una tarjeta más de la fila.
+            MetricTile(caption: "Gastado desde que empezamos",
+                       value: Money.format(m.spentEver),
+                       note: m.startedOn.map { "Todo, desde el \(DayString.short(DayString.today($0)))" }
+                             ?? "Todavía no hay nada anotado",
+                       destacada: true)
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
+                                GridItem(.flexible(), spacing: 10)], spacing: 10) {
             MetricTile(caption: "Invertido en total", value: Money.format(m.investmentEver),
-                       note: "Desde el principio")
+                       note: "Maquinaria y compras de una vez")
             MetricTile(caption: "Invertido aquí", value: Money.format(m.investmentPeriod),
                        note: "Maquinaria y compras de una vez")
             MetricTile(caption: "Gastos recurrentes", value: Money.format(m.recurringTotal),
                        note: "Lo que se repite solo")
             MetricTile(caption: "Gastos sueltos", value: Money.format(m.oneOffTotal),
                        note: "Compras de este período")
+            }
         }
         .padding(.bottom, 4)
     }
@@ -121,7 +130,22 @@ struct ExpenseEditor: View {
     @State private var amount = ""
     @State private var kind: ExpenseKind = .gasto
     @State private var frequency: ExpenseFrequency = .mensual
+    @State private var cantidad = ""
     @State private var loaded = false
+
+    /// Vacío quiere decir uno: si el campo arrancara con un "1" dentro,
+    /// teclear un 2 dejaría "12".
+    private var cuantos: Double {
+        let n = Quantity.parse(cantidad)
+        return n > 0 ? n : 1
+    }
+
+    /// Sólo se enseña cuando hay más de uno: si no, repetiría el precio.
+    private var totalGastado: String? {
+        let precio = Double(amount.replacingOccurrences(of: ",", with: ".")) ?? 0
+        guard precio > 0, cuantos > 1 else { return nil }
+        return "\(Quantity.pretty(cuantos)) × \(Money.format(precio)) = \(Money.format(precio * cuantos))"
+    }
 
     private var canSave: Bool {
         !name.trimmingCharacters(in: .whitespaces).isEmpty
@@ -166,7 +190,21 @@ struct ExpenseEditor: View {
                     .stroke(Theme.line, lineWidth: 1))
             }
 
-            MoneyField(label: "Monto", value: $amount)
+            MoneyField(label: "Precio de uno", value: $amount)
+
+            // Dos rollos de papel a $1.25 son $2.50, pero el precio anotado
+            // sigue siendo $1.25: es el que ella reconocerá la próxima vez.
+            QuantityField(label: "¿Cuántos?", text: $cantidad)
+
+            if let total = totalGastado {
+                HStack {
+                    Text("En total").font(Theme.rounded(13)).foregroundStyle(Theme.muted)
+                    Spacer()
+                    Text(total).font(Theme.rounded(18, .bold)).foregroundStyle(Theme.ink)
+                }
+                .padding(12)
+                .background(Color(hex: 0xFDF7EF), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            }
 
             if kind == .recurrente {
                 VStack(alignment: .leading, spacing: 6) {
@@ -200,6 +238,7 @@ struct ExpenseEditor: View {
             amount = e.amount > 0 ? String(format: "%.2f", e.amount) : ""
             kind = e.kind
             frequency = e.frequency
+            cantidad = e.cantidad > 1 ? Quantity.pretty(e.cantidad) : ""
         }
     }
 
@@ -210,6 +249,7 @@ struct ExpenseEditor: View {
         record.name = name.trimmingCharacters(in: .whitespaces)
         record.category = category
         record.amount = Double(amount.replacingOccurrences(of: ",", with: ".")) ?? 0
+        record.cantidad = cuantos
         record.setKind(kind)
         record.setFrequency(frequency)
         store.save(record)

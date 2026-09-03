@@ -154,6 +154,24 @@ struct IngredientEditor: View {
     var body: some View {
         EditorScaffold(title: ingredient == nil ? "Nuevo ingrediente" : "Editar ingrediente",
                        canSave: canSave, onSave: commit) {
+            // Lo primero, como en la web: qué es esto decide lo demás —si aporta
+            // macros, si pide peso por pieza, en qué filtro aparece—. Estaba al
+            // final, escondido dentro de los macros, que es justo donde no se
+            // busca.
+            //
+            // Lo que ella elija manda sobre lo que se adivina por el nombre: una
+            // ralladura de limón se puede sacar de "fruta", y una "pulpa" que no
+            // suena a nada se puede meter. Y el empaque no es organización: una
+            // caja cuesta dinero pero no se come, así que no aporta macros ni
+            // impide que la receta consiga sus etiquetas de dieta.
+            Picker("Qué es", selection: $kind) {
+                ForEach(IngredientKind.allCases, id: \.self) { k in
+                    Text("\(k.emoji) \(k.label)").tag(k)
+                }
+            }
+            .pickerStyle(.segmented)
+            .tint(Theme.green)
+
             PlainField(label: "Nombre", placeholder: "ej. Harina", text: $name)
             PlainField(label: "¿Cómo lo compras?", placeholder: "ej. bolsa, caja, botella", text: $unit)
             QuantityField(label: "¿Cuánto trae?", text: $quantity,
@@ -349,25 +367,6 @@ struct IngredientEditor: View {
                 Text("Por cada \(macroBasis)")
                     .font(Theme.rounded(12, .bold))
                     .foregroundStyle(Theme.ink)
-
-                // Lo que ella elija manda sobre lo que se adivina por el
-                // nombre: una ralladura de limón se puede sacar de "fruta", y
-                // una "pulpa" que no suena a nada se puede meter.
-                //
-                // El empaque no es un detalle de organización: una caja cuesta
-                // dinero pero no se come, así que no aporta macros ni impide
-                // que la receta consiga sus etiquetas de dieta.
-                Picker("Qué es", selection: $kind) {
-                    ForEach(IngredientKind.allCases, id: \.self) { k in
-                        Text("\(k.emoji) \(k.label)").tag(k)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .tint(Theme.green)
-                .padding(12)
-                .background(Color(hex: 0xFDF7EF), in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .stroke(Color(hex: 0xF0E2CD), lineWidth: 1))
 
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 10),
                                     GridItem(.flexible(), spacing: 10)], spacing: 10) {

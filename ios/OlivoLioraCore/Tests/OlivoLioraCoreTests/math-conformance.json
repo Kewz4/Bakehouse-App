@@ -1543,6 +1543,235 @@
       "fruta": false
     }
   ],
+  "periodos": {
+    "hoy": "2026-09-03",
+    "casos": [
+      {
+        "clave": "day",
+        "offset": 0,
+        "desde": "2026-09-03",
+        "hasta": "2026-09-03",
+        "etiqueta": "Hoy",
+        "movible": true
+      },
+      {
+        "clave": "day",
+        "offset": -1,
+        "desde": "2026-09-02",
+        "hasta": "2026-09-02",
+        "etiqueta": "Ayer",
+        "movible": true
+      },
+      {
+        "clave": "day",
+        "offset": -5,
+        "desde": "2026-08-29",
+        "hasta": "2026-08-29",
+        "etiqueta": "29 de agosto",
+        "movible": true
+      },
+      {
+        "clave": "day",
+        "offset": 1,
+        "desde": "2026-09-03",
+        "hasta": "2026-09-03",
+        "etiqueta": "Hoy",
+        "movible": true
+      },
+      {
+        "clave": "week",
+        "offset": 0,
+        "desde": "2026-08-31",
+        "hasta": "2026-09-06",
+        "etiqueta": "Esta semana",
+        "movible": true
+      },
+      {
+        "clave": "week",
+        "offset": -1,
+        "desde": "2026-08-24",
+        "hasta": "2026-08-30",
+        "etiqueta": "Semana del 24 de agosto",
+        "movible": true
+      },
+      {
+        "clave": "week",
+        "offset": -5,
+        "desde": "2026-07-27",
+        "hasta": "2026-08-02",
+        "etiqueta": "Semana del 27 de julio",
+        "movible": true
+      },
+      {
+        "clave": "week",
+        "offset": 1,
+        "desde": "2026-08-31",
+        "hasta": "2026-09-06",
+        "etiqueta": "Esta semana",
+        "movible": true
+      },
+      {
+        "clave": "month",
+        "offset": 0,
+        "desde": "2026-09-01",
+        "hasta": "2026-09-30",
+        "etiqueta": "Septiembre",
+        "movible": true
+      },
+      {
+        "clave": "month",
+        "offset": -1,
+        "desde": "2026-08-01",
+        "hasta": "2026-08-31",
+        "etiqueta": "Agosto",
+        "movible": true
+      },
+      {
+        "clave": "month",
+        "offset": -5,
+        "desde": "2026-04-01",
+        "hasta": "2026-04-30",
+        "etiqueta": "Abril",
+        "movible": true
+      },
+      {
+        "clave": "month",
+        "offset": 1,
+        "desde": "2026-09-01",
+        "hasta": "2026-09-30",
+        "etiqueta": "Septiembre",
+        "movible": true
+      },
+      {
+        "clave": "quarter",
+        "offset": 0,
+        "desde": "2026-07-01",
+        "hasta": "2026-09-30",
+        "etiqueta": "Trimestre: julio a septiembre",
+        "movible": true
+      },
+      {
+        "clave": "quarter",
+        "offset": -1,
+        "desde": "2026-04-01",
+        "hasta": "2026-06-30",
+        "etiqueta": "Trimestre: abril a junio",
+        "movible": true
+      },
+      {
+        "clave": "quarter",
+        "offset": -5,
+        "desde": "2025-04-01",
+        "hasta": "2025-06-30",
+        "etiqueta": "Trimestre: abril a junio",
+        "movible": true
+      },
+      {
+        "clave": "quarter",
+        "offset": 1,
+        "desde": "2026-07-01",
+        "hasta": "2026-09-30",
+        "etiqueta": "Trimestre: julio a septiembre",
+        "movible": true
+      },
+      {
+        "clave": "semester",
+        "offset": 0,
+        "desde": "2026-07-01",
+        "hasta": "2026-12-31",
+        "etiqueta": "Semestre: julio a diciembre",
+        "movible": true
+      },
+      {
+        "clave": "semester",
+        "offset": -1,
+        "desde": "2026-01-01",
+        "hasta": "2026-06-30",
+        "etiqueta": "Semestre: enero a junio",
+        "movible": true
+      },
+      {
+        "clave": "semester",
+        "offset": -5,
+        "desde": "2024-01-01",
+        "hasta": "2024-06-30",
+        "etiqueta": "Semestre: enero a junio",
+        "movible": true
+      },
+      {
+        "clave": "semester",
+        "offset": 1,
+        "desde": "2026-07-01",
+        "hasta": "2026-12-31",
+        "etiqueta": "Semestre: julio a diciembre",
+        "movible": true
+      },
+      {
+        "clave": "year",
+        "offset": 0,
+        "desde": "2026-01-01",
+        "hasta": "2026-12-31",
+        "etiqueta": "2026",
+        "movible": true
+      },
+      {
+        "clave": "year",
+        "offset": -1,
+        "desde": "2025-01-01",
+        "hasta": "2025-12-31",
+        "etiqueta": "2025",
+        "movible": true
+      },
+      {
+        "clave": "year",
+        "offset": -5,
+        "desde": "2021-01-01",
+        "hasta": "2021-12-31",
+        "etiqueta": "2021",
+        "movible": true
+      },
+      {
+        "clave": "year",
+        "offset": 1,
+        "desde": "2026-01-01",
+        "hasta": "2026-12-31",
+        "etiqueta": "2026",
+        "movible": true
+      },
+      {
+        "clave": "all",
+        "offset": 0,
+        "desde": "1900-01-01",
+        "hasta": "2026-09-03",
+        "etiqueta": "Desde el inicio",
+        "movible": false
+      },
+      {
+        "clave": "all",
+        "offset": -1,
+        "desde": "1900-01-01",
+        "hasta": "2026-09-03",
+        "etiqueta": "Desde el inicio",
+        "movible": false
+      },
+      {
+        "clave": "all",
+        "offset": -5,
+        "desde": "1900-01-01",
+        "hasta": "2026-09-03",
+        "etiqueta": "Desde el inicio",
+        "movible": false
+      },
+      {
+        "clave": "all",
+        "offset": 1,
+        "desde": "1900-01-01",
+        "hasta": "2026-09-03",
+        "etiqueta": "Desde el inicio",
+        "movible": false
+      }
+    ]
+  },
   "gastos": {
     "hoy": "2026-03-15",
     "cantidades": [

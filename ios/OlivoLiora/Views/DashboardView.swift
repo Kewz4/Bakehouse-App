@@ -81,36 +81,7 @@ struct DashboardView: View {
 
     // MARK: - Período
 
-    private var periodPicker: some View {
-        @Bindable var store = store
-
-        return VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("¿Qué quieres ver?")
-                    .font(Theme.rounded(15, .bold))
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-                Picker("Período", selection: $store.period) {
-                    ForEach(Period.allCases) { p in Text(p.label).tag(p) }
-                }
-                .pickerStyle(.menu)
-                .tint(Theme.green)
-            }
-
-            if store.period == .custom {
-                HStack(spacing: 10) {
-                    DatePicker("Desde", selection: $store.customFrom, displayedComponents: .date)
-                        .font(Theme.rounded(13))
-                    DatePicker("Hasta", selection: $store.customTo, displayedComponents: .date)
-                        .font(Theme.rounded(13))
-                }
-                .labelsHidden()
-                .environment(\.locale, Locale(identifier: "es"))
-            }
-        }
-        .padding(16)
-        .panelCard()
-    }
+    private var periodPicker: some View { PeriodBar() }
 
     // MARK: - Métricas
 
@@ -143,34 +114,116 @@ struct DashboardView: View {
     }
 }
 
+/// La barra de "¿de cuándo?": flechas para ir mes a mes y un menú para elegir
+/// de qué tamaño es el paso.
+///
+/// Vive aquí y no dentro del panel porque la pregunta se hace en tres
+/// pantallas. En recetas e ingredientes no aparece: son un catálogo, no cambian
+/// porque cambie el mes.
+struct PeriodBar: View {
+    @Environment(AppStore.self) private var store
+
+    var body: some View {
+        @Bindable var store = store
+
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                if store.period.movible {
+                    Button { store.movePeriod(-1) } label: {
+                        Image(systemName: "chevron.left").font(.system(size: 15, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(Theme.green)
+                    .frame(width: 34, height: 34)
+
+                    Text(store.periodLabel)
+                        .font(Theme.rounded(15, .bold))
+                        .foregroundStyle(Theme.ink)
+                        .frame(minWidth: 96)
+                        .contentTransition(.numericText())
+
+                    Button { store.movePeriod(1) } label: {
+                        Image(systemName: "chevron.right").font(.system(size: 15, weight: .bold))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(store.periodOffset >= 0 ? Theme.muted.opacity(0.4) : Theme.green)
+                    .frame(width: 34, height: 34)
+                    .disabled(store.periodOffset >= 0)
+                } else {
+                    Text(store.periodLabel)
+                        .font(Theme.rounded(15, .bold))
+                        .foregroundStyle(Theme.ink)
+                }
+
+                Spacer()
+
+                Picker("Período", selection: Binding(
+                    get: { store.period },
+                    set: { store.setPeriod($0) })) {
+                    ForEach(Period.allCases) { p in Text(p.label).tag(p) }
+                }
+                .pickerStyle(.menu)
+                .tint(Theme.green)
+            }
+
+            if store.period == .custom {
+                HStack(spacing: 10) {
+                    DatePicker("Desde", selection: $store.customFrom, displayedComponents: .date)
+                        .font(Theme.rounded(13))
+                    DatePicker("Hasta", selection: $store.customTo, displayedComponents: .date)
+                        .font(Theme.rounded(13))
+                }
+                .labelsHidden()
+                .environment(\.locale, Locale(identifier: "es"))
+            }
+        }
+        .animation(.snappy(duration: 0.22), value: store.periodLabel)
+    }
+}
+
 struct MetricTile: View {
     let caption: String
     let value: String
     let note: String
     var valueColor: Color = Theme.ink
+    /// En burdeos y a lo ancho, para la cifra que se lee primero.
+    var destacada: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(caption)
                 .font(Theme.rounded(12))
-                .foregroundStyle(Theme.muted)
+                .foregroundStyle(destacada ? .white.opacity(0.75) : Theme.muted)
                 .lineLimit(1)
             Text(value)
-                .font(Theme.rounded(23, .bold))
-                .foregroundStyle(valueColor)
+                .font(Theme.rounded(destacada ? 28 : 23, .bold))
+                .foregroundStyle(destacada ? .white : valueColor)
                 .minimumScaleFactor(0.7)
                 .lineLimit(1)
                 .contentTransition(.numericText())
             Text(note)
                 .font(Theme.rounded(11, .semibold))
-                .foregroundStyle(Theme.green)
+                .foregroundStyle(destacada ? .white.opacity(0.8) : Theme.green)
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(maxWidth: .infinity, minHeight: 104, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: destacada ? 92 : 104, alignment: .topLeading)
         .padding(14)
-        .panelCard()
+        .modifier(TileBackground(destacada: destacada))
         .animation(.snappy(duration: 0.25), value: value)
+    }
+}
+
+/// El fondo de la tarjeta: el de siempre, o burdeos cuando destaca.
+private struct TileBackground: ViewModifier {
+    let destacada: Bool
+    func body(content: Content) -> some View {
+        if destacada {
+            content.background(Theme.green,
+                               in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        } else {
+            content.panelCard()
+        }
     }
 }
 

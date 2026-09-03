@@ -285,6 +285,22 @@ const out = {
     return { in: u, amount: b.amount, unit: b.unit, etiqueta: b.etiqueta, factor: b.factor };
   }),
   kindOf: categorias.map(i => ({ in: i, kind: B.kindOf(i), fruta: B.esFruta(i) })),
+  periodos: (() => {
+    // Un "hoy" fijo: si no, el fixture cambiaría cada día. Las fechas se
+    // escriben por componentes locales, no en ISO, para que el huso horario del
+    // que corre esto no corra ningún día.
+    const hoy = new Date(2026, 8, 3);   // 3 de septiembre de 2026, un jueves
+    const dia = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const casos = [];
+    for (const f of ['day', 'week', 'month', 'quarter', 'semester', 'year', 'all']) {
+      for (const o of [0, -1, -5, 1]) {
+        const r = B.rangoDePeriodo(f, o, hoy);
+        casos.push({ clave: f, offset: o, desde: dia(r.desde), hasta: dia(r.hasta),
+                     etiqueta: r.etiqueta, movible: r.movible });
+      }
+    }
+    return { hoy: dia(hoy), casos };
+  })(),
   gastos: (() => {
     B.fijarAhora(() => new Date(HOY + 'T12:00:00Z'));
     const desde = new Date('2026-03-01T00:00:00Z');
@@ -312,6 +328,7 @@ console.log('parseQty:%d prettyQty:%d baseCost:%d recipe:%d macroRecipes:%d -> %
   out.parseQty.length, out.prettyQty.length, out.baseCost.length, out.recipe.length,
   out.macroRecipes.length, path.relative(process.cwd(), OUT));
 console.log('badgeRecipes:%d countLabel:%d joinDetail:%d', out.badgeRecipes.length, out.countLabel.length, out.joinDetail.length);
+console.log('periodos:%d', out.periodos.casos.length);
 console.log('gastos: cantidades:%d mes:%s inicio:%s',
   out.gastos.cantidades.length, out.gastos.mes.total.toFixed(2), out.gastos.inicio.total.toFixed(2));
 console.log('escala:%d costBreakdown:%d unitFactor:%d macroBasis:%d kindOf:%d',

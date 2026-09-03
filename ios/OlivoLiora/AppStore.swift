@@ -21,8 +21,26 @@ final class AppStore {
     /// Filtro del panel. Es lo único configurable, y es parte del negocio
     /// (¿cómo me fue este mes?), no un ajuste técnico.
     var period: Period = .month
+    /// Cuántos períodos atrás se está mirando. Cero es el de ahora. Sirve para
+    /// preguntar "¿y en agosto?" sin escribir fechas.
+    var periodOffset = 0
     var customFrom = Calendar.current.date(byAdding: .month, value: -1, to: Date()) ?? Date()
     var customTo = Date()
+
+    /// Mueve el período uno atrás o uno adelante. Nunca más allá del de ahora:
+    /// del futuro no hay datos.
+    func movePeriod(_ paso: Int) {
+        guard period.movible else { return }
+        periodOffset = min(0, periodOffset + paso)
+    }
+
+    /// Al cambiar de tipo de período se vuelve al de ahora.
+    func setPeriod(_ p: Period) { period = p; periodOffset = 0 }
+
+    /// Cómo se llama el período que se está mirando: "Agosto", "Hoy"…
+    var periodLabel: String {
+        period.span(offset: periodOffset, from: customFrom, to: customTo).label
+    }
 
     private let client = SyncClient()
     private let monitor = NetworkMonitor()
@@ -68,7 +86,7 @@ final class AppStore {
     }
 
     var range: ClosedRange<Date> {
-        period.range(from: customFrom, to: customTo)
+        period.span(offset: periodOffset, from: customFrom, to: customTo).range
     }
 
     // MARK: - Lecturas para la interfaz

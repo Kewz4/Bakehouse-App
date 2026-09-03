@@ -921,71 +921,31 @@ let periodoOffset=0;
 /** Mueve el período uno atrás o uno adelante. Nunca más allá del actual. */
 function moverPeriodo(paso){
  const f=($('#periodFilter')||{}).value||'month';
- if(f==='all'||f==='custom')return;
+ if(!rangoDePeriodo(f,0).movible)return;
  periodoOffset=Math.min(0,periodoOffset+paso);
  render()}
 
 /** Al cambiar de tipo de período se vuelve al de ahora. */
 function cambiarPeriodo(){periodoOffset=0;render()}
 
-const MESES=['enero','febrero','marzo','abril','mayo','junio','julio',
-             'agosto','septiembre','octubre','noviembre','diciembre'];
-const mayus=t=>t.charAt(0).toUpperCase()+t.slice(1);
-
 /**
- * De qué fechas se está hablando.
- *
- * El final ya no es una fecha abierta y lejanísima, sino el final de verdad del
- * período: así "agosto" es agosto y no "agosto en adelante". Lo que se repite
- * solo sigue sin contarse hacia el futuro — de eso se encarga vecesEnRango.
+ * De qué fechas se está hablando. La cuenta vive en el núcleo compartido, para
+ * que el teléfono y la web no puedan separarse.
  */
 function periodRange(){
  const f=($('#periodFilter')||{}).value||'month';
- const hoy=new Date();
- const o=periodoOffset;
- let start,end,label;
- const finDe=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate(),23,59,59,999);
-
- if(f==='day'){
-  start=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()+o);
-  end=finDe(start);
-  label=o===0?'Hoy':o===-1?'Ayer':`${start.getDate()} de ${MESES[start.getMonth()]}`;
- }else if(f==='week'){
-  const lunes=new Date(hoy.getFullYear(),hoy.getMonth(),hoy.getDate()-((hoy.getDay()+6)%7)+o*7);
-  start=lunes;end=finDe(new Date(lunes.getFullYear(),lunes.getMonth(),lunes.getDate()+6));
-  label=o===0?'Esta semana':`Semana del ${start.getDate()} de ${MESES[start.getMonth()]}`;
- }else if(f==='month'){
-  start=new Date(hoy.getFullYear(),hoy.getMonth()+o,1);
-  end=finDe(new Date(start.getFullYear(),start.getMonth()+1,0));
-  label=mayus(MESES[start.getMonth()])+(start.getFullYear()!==hoy.getFullYear()?' '+start.getFullYear():'');
- }else if(f==='quarter'){
-  const t=Math.floor(hoy.getMonth()/3)+o;
-  start=new Date(hoy.getFullYear(),t*3,1);
-  end=finDe(new Date(start.getFullYear(),start.getMonth()+3,0));
-  label=`Trimestre: ${MESES[start.getMonth()]} a ${MESES[end.getMonth()]}`;
- }else if(f==='semester'){
-  const sem=(hoy.getMonth()<6?0:1)+o;
-  start=new Date(hoy.getFullYear(),sem*6,1);
-  end=finDe(new Date(start.getFullYear(),start.getMonth()+6,0));
-  label=`Semestre: ${MESES[start.getMonth()]} a ${MESES[end.getMonth()]}`;
- }else if(f==='year'){
-  start=new Date(hoy.getFullYear()+o,0,1);
-  end=finDe(new Date(start.getFullYear(),11,31));
-  label=String(start.getFullYear());
- }else if(f==='custom'){
+ const r=rangoDePeriodo(f,periodoOffset);
+ let start=r.desde,end=r.hasta,label=r.etiqueta;
+ if(f==='custom'){
   const from=($('#filterFrom')||{}).value,to=($('#filterTo')||{}).value;
   start=new Date((from||'1900-01-01')+'T00:00:00');
-  end=to?new Date(to+'T23:59:59'):finDe(hoy);
+  if(to)end=new Date(to+'T23:59:59');
   label='Fechas elegidas';
- }else{
-  start=new Date('1900-01-01T00:00:00');end=finDe(hoy);label='Desde el inicio';
  }
-
  const cd=$('#customDates');if(cd)cd.style.display=f==='custom'?'grid':'none';
  const et=$('#periodLabel');if(et)et.textContent=label;
+ const mover=$('#periodMover');if(mover)mover.style.display=r.movible?'':'none';
  // No se puede ir más allá del período de ahora: no hay datos del futuro.
- const mover=$('#periodMover');
- if(mover)mover.style.display=(f==='all'||f==='custom')?'none':'';
  const sig=$('#periodNext');if(sig)sig.disabled=periodoOffset>=0;
  return{start,end,label}}
 render=function(){const{start,end,label}=periodRange();const all={sales:data.sales,expenses:data.expenses};window.ALLDATA=all;

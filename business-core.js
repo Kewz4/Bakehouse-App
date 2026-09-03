@@ -529,6 +529,62 @@ function desgloseGastos(lista,desde,hasta){
  out.total=out.operativo+out.inversion;
  return out}
 
+// ---------------------------------------------------------------------------
+// Períodos
+// ---------------------------------------------------------------------------
+const PERIODOS=['day','week','month','quarter','semester','year','all','custom'];
+const MESES_ES=['enero','febrero','marzo','abril','mayo','junio','julio',
+                'agosto','septiembre','octubre','noviembre','diciembre'];
+
+/**
+ * De qué fechas se habla cuando se elige un período.
+ *
+ * `offset` es cuántos períodos atrás: 0 es el de ahora, -1 el anterior. Existe
+ * para poder preguntar "¿y en agosto?" sin escribir fechas.
+ *
+ * El final es el final DE VERDAD del período, no una fecha abierta y lejana.
+ * Antes "agosto" significaba "agosto en adelante", y por eso mirar hacia atrás
+ * no servía de nada: todos los meses daban el mismo número. Lo que se repite
+ * solo sigue sin contarse hacia el futuro, de eso se encarga vecesEnRango.
+ */
+function rangoDePeriodo(clave,offset,hoy){
+ const f=PERIODOS.includes(clave)?clave:'month';
+ const o=Math.min(0,+offset||0);
+ const h=hoy||ahoraFn();
+ const finDe=d=>new Date(d.getFullYear(),d.getMonth(),d.getDate(),23,59,59,999);
+ const mayus=t=>t.charAt(0).toUpperCase()+t.slice(1);
+ let desde,hasta,etiqueta;
+
+ if(f==='day'){
+  desde=new Date(h.getFullYear(),h.getMonth(),h.getDate()+o);
+  hasta=finDe(desde);
+  etiqueta=o===0?'Hoy':o===-1?'Ayer':`${desde.getDate()} de ${MESES_ES[desde.getMonth()]}`;
+ }else if(f==='week'){
+  desde=new Date(h.getFullYear(),h.getMonth(),h.getDate()-((h.getDay()+6)%7)+o*7);
+  hasta=finDe(new Date(desde.getFullYear(),desde.getMonth(),desde.getDate()+6));
+  etiqueta=o===0?'Esta semana':`Semana del ${desde.getDate()} de ${MESES_ES[desde.getMonth()]}`;
+ }else if(f==='month'){
+  desde=new Date(h.getFullYear(),h.getMonth()+o,1);
+  hasta=finDe(new Date(desde.getFullYear(),desde.getMonth()+1,0));
+  etiqueta=mayus(MESES_ES[desde.getMonth()])+(desde.getFullYear()!==h.getFullYear()?' '+desde.getFullYear():'');
+ }else if(f==='quarter'){
+  desde=new Date(h.getFullYear(),(Math.floor(h.getMonth()/3)+o)*3,1);
+  hasta=finDe(new Date(desde.getFullYear(),desde.getMonth()+3,0));
+  etiqueta=`Trimestre: ${MESES_ES[desde.getMonth()]} a ${MESES_ES[hasta.getMonth()]}`;
+ }else if(f==='semester'){
+  desde=new Date(h.getFullYear(),((h.getMonth()<6?0:1)+o)*6,1);
+  hasta=finDe(new Date(desde.getFullYear(),desde.getMonth()+6,0));
+  etiqueta=`Semestre: ${MESES_ES[desde.getMonth()]} a ${MESES_ES[hasta.getMonth()]}`;
+ }else if(f==='year'){
+  desde=new Date(h.getFullYear()+o,0,1);
+  hasta=finDe(new Date(desde.getFullYear(),11,31));
+  etiqueta=String(desde.getFullYear());
+ }else{
+  // 'all' y 'custom' no se mueven: no hay "el todo anterior".
+  desde=new Date(1900,0,1);hasta=finDe(h);etiqueta='Desde el inicio';
+ }
+ return {desde:desde,hasta:hasta,etiqueta:etiqueta,movible:f!=='all'&&f!=='custom'}}
+
 /**
  * Todo lo que lleva puesto el negocio desde que empezó.
  *
@@ -721,5 +777,6 @@ return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS
         frecuenciaDe:frecuenciaDe, vecesEnRango:vecesEnRango, montoEnRango:montoEnRango,
         cantidadDe:cantidadDe, montoBase:montoBase,
         desgloseGastos:desgloseGastos, desdeElInicio:desdeElInicio,
+        PERIODOS:PERIODOS, rangoDePeriodo:rangoDePeriodo,
         fijarAhora:fijarAhora};
 });

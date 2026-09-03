@@ -147,7 +147,17 @@ final class MathConformanceTests: XCTestCase {
             let inicio: Desglose
         }
         let kindOf: [KindCase]
+        struct PeriodosCase: Decodable {
+            struct Caso: Decodable {
+                let clave: String; let offset: Int
+                let desde: String; let hasta: String
+                let etiqueta: String; let movible: Bool
+            }
+            let hoy: String
+            let casos: [Caso]
+        }
         let gastos: GastosCase
+        let periodos: PeriodosCase
         let countLabel: [CountCase]
         let joinDetail: [JoinCase]
         let recipe: [RecipeCase]
@@ -467,6 +477,31 @@ final class MathConformanceTests: XCTestCase {
             let hasta = Investment.parse("2999-12-31")!
             comprobar(Investment.breakdown(gastos, from: desde, to: hasta), f.mes, "mes")
             comprobar(Investment.sinceTheStart(gastos), f.inicio, "desde el inicio")
+        }
+    }
+
+    /// Los períodos: de qué fechas se habla y cómo se llama eso.
+    ///
+    /// Es la cuenta que decide qué ventas y qué gastos se ven. Si Swift y
+    /// JavaScript no la hacen igual, el teléfono y la laptop enseñarían meses
+    /// distintos con los mismos datos y nadie lo notaría hasta cuadrar caja.
+    func testPeriodSpansMatchJavaScript() throws {
+        let f = try load().periodos
+        let hoy = try XCTUnwrap(DayString.date(from: f.hoy))
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone.current
+        let dia: (Date) -> String = { d in
+            let c = cal.dateComponents([.year, .month, .day], from: d)
+            return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+        }
+        for c in f.casos {
+            let p = try XCTUnwrap(Period(rawValue: c.clave), "período «\(c.clave)»")
+            let s = p.span(now: hoy, offset: c.offset)
+            let que = "\(c.clave) \(c.offset)"
+            XCTAssertEqual(dia(s.range.lowerBound), c.desde, "\(que): desde")
+            XCTAssertEqual(dia(s.range.upperBound), c.hasta, "\(que): hasta")
+            XCTAssertEqual(s.label, c.etiqueta, "\(que): etiqueta")
+            XCTAssertEqual(p.movible, c.movible, "\(que): movible")
         }
     }
 

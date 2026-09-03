@@ -16,13 +16,10 @@ struct SalesView: View {
     var body: some View {
         ListScaffold(
             title: "Ventas",
-            // El período sí hace falta decirlo: esta lista está filtrada por él
-            // y el selector está en la otra pestaña, así que desde aquí no se
-            // vería por ningún lado de dónde salen (o no salen) estas ventas.
-            detail: Labels.join(
-                store.period.label,
-                Labels.count(shown: filtered.count, total: store.sales.count,
-                             singular: "venta", plural: "ventas")),
+            // El período ya no se dice aquí: la barra de arriba lo enseña y
+            // además deja cambiarlo, así que repetirlo sobraba.
+            detail: Labels.count(shown: filtered.count, total: store.sales.count,
+                                 singular: "venta", plural: "ventas"),
             searchPrompt: "Buscar venta…",
             search: $search,
             addLabel: "Registrar venta",
@@ -32,6 +29,8 @@ struct SalesView: View {
                 ? "Aún no hay ventas aquí. Anota tu primera venta y verás cuánto ganaste."
                 : "Ninguna venta coincide con tu búsqueda."
         ) {
+            PeriodBar().plainRow()
+
             ForEach(filtered) { sale in
                 SaleRow(sale: sale, profit: store.profit(of: sale))
                     .contentShape(Rectangle())
