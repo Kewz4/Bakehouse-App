@@ -58,16 +58,13 @@ struct IngredientsView: View {
                     }
                     Spacer(minLength: 8)
 
-                    // Sólo tiene sentido preguntarlo si está en alguna receta.
-                    if !Analytics.recipes(using: ing, from: store.recipes).isEmpty {
-                        Button { rindiendo = ing } label: {
-                            Image(systemName: "scalemass")
-                                .font(.system(size: 15))
-                                .foregroundStyle(Theme.green)
-                                .frame(width: 34, height: 34)
-                        }
-                        .buttonStyle(.plain)
+                    Button { rindiendo = ing } label: {
+                        Image(systemName: "scalemass")
+                            .font(.system(size: 15))
+                            .foregroundStyle(Theme.green)
+                            .frame(width: 34, height: 34)
                     }
+                    .buttonStyle(.plain)
 
                     // Puede decir dos cosas: por pieza y por peso.
                     VStack(alignment: .trailing, spacing: 4) {
@@ -634,7 +631,9 @@ struct YieldSheet: View {
                     menuCampo("¿Para qué receta?", seleccion: Binding(
                         get: { receta?.id ?? "" },
                         set: { recetaId = $0 }),
-                              opciones: recetas.map { ($0.id, $0.name) })
+                              opciones: sinRecetas
+                                ? [("", "Ninguna receta la usa todavía")]
+                                : recetas.map { ($0.id, $0.name) })
 
                     resultadoCard
                 }
@@ -680,12 +679,19 @@ struct YieldSheet: View {
         }
     }
 
+    /// Si ninguna receta lo lleva no hay pregunta que responder, y decirlo es
+    /// más útil que esconder el botón y dejarla adivinando por qué unos
+    /// ingredientes lo tienen y otros no.
+    private var sinRecetas: Bool { recetas.isEmpty }
+
     private var titulo: String {
+        if sinRecetas { return "Todavía no puedo decírtelo" }
         guard let r = resultado else { return "Te alcanza para" }
         return r.isEnough ? "Te alcanza para" : "No alcanza ni para una"
     }
 
     private var cifra: String {
+        if sinRecetas { return "falta la receta" }
         guard let r = resultado else { return "—" }
         if !r.isEnough {
             return "faltan \(Quantity.pretty((r.short * 10).rounded() / 10)) \(r.baseUnit)"
@@ -695,6 +701,10 @@ struct YieldSheet: View {
     }
 
     private var nota: String? {
+        if sinRecetas {
+            return "Ninguna de tus recetas lleva \(ingredient.name) todavía. "
+                + "Agrégalo a una y aquí te digo para cuántas tandas alcanza."
+        }
         guard let r = resultado, let receta else {
             return Quantity.parse(cantidad) > 0
                 ? "Con esa medida no puedo hacer la cuenta."

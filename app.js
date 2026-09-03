@@ -360,8 +360,8 @@ let calcReceta=null;
  * fila concreta ya viene elegido el ingrediente.
  */
 function abrirRendimiento(ingId){
- const ings=data.ingredients.filter(x=>recetasCon(x,data.recipes).length);
- if(!ings.length)return toast('Primero crea una receta que use alguno de tus ingredientes.',true);
+ const ings=data.ingredients;
+ if(!ings.length)return toast('Primero guarda algún ingrediente.',true);
  const elegido=ings.find(x=>x.id===ingId)||ings[0];
  openModal('¿Para cuánto me alcanza?',`
   <p class="helper">Dime cuánto tienes y para qué receta, y te digo cuántas tandas salen.</p>
@@ -383,8 +383,18 @@ function abrirRendimiento(ingId){
   <div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cerrar</button></div>`);
  calcularRendimiento()}
 
-const opcionesReceta=ing=>recetasCon(ing,data.recipes)
- .map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('');
+/**
+ * Las recetas que llevan este ingrediente.
+ *
+ * Cuando no hay ninguna se dice, en vez de dejar el desplegable vacío: un hueco
+ * en blanco parece que la app se rompió, y lo que pasa es que a esa vainilla
+ * todavía no le ha tocado entrar en una receta.
+ */
+const opcionesReceta=ing=>{
+ const rs=recetasCon(ing,data.recipes);
+ return rs.length
+  ? rs.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('')
+  : `<option value="">Ninguna receta la usa todavía</option>`};
 
 /** Al cambiar de ingrediente cambian sus unidades y sus recetas. */
 function rendCambiaIngrediente(){
@@ -401,6 +411,14 @@ function calcularRendimiento(){
  const cant=parseQty(($('#rendQty')||{}).value||'');
  const out=$('#rendOut'),cap=$('#rendCaption'),nota=$('#rendNota');
  if(!out)return;
+ // Antes que nada: si no está en ninguna receta, no hay pregunta que responder.
+ // Decirlo es más útil que esconder el botón y dejarla adivinando por qué unos
+ // ingredientes lo tienen y otros no.
+ if(ing&&!recetasCon(ing,data.recipes).length){
+  cap.textContent='Todavía no puedo decírtelo';
+  out.textContent='falta la receta';
+  nota.textContent=`Ninguna de tus recetas lleva ${ing.name} todavía. Agrégalo a una y aquí te digo para cuántas tandas alcanza.`;
+  return}
  const r=rendimiento(ing,cant,($('#rendUnit')||{}).value,receta);
  if(!r){
   cap.textContent='Te alcanza para';
