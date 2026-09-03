@@ -242,10 +242,17 @@ async function compactarBlob(urls) {
  * no puede pisar nada escrito después. Y si el Blob falla, no pasa nada grave:
  * se sigue con la base vacía y se reintenta a la próxima.
  */
+// Una vez comprobado que la fila existe, no hace falta volver a mirar: la fila
+// no se borra sola. Sin esto, CADA lectura consultaba la base dos veces —una
+// para preguntar si hacía falta mudarse y otra para leer— y la mitad sobraba.
+let yaMudado = false;
+
 async function mudarSiHaceFalta() {
-  if (!hayBlob()) return { mudado: false, motivo: 'sin-blob' };
+  if (yaMudado || !hayBlob()) return { mudado: false, motivo: 'sin-blob' };
   const actual = await leerPostgres();
-  if (actual.existe) return { mudado: false, motivo: 'ya-estaba' };
+  // Ojo con el orden: esto sale ANTES de tocar el Blob. Una vez mudados los
+  // datos, el Blob no se vuelve a leer nunca, que es justo el punto de mudarse.
+  if (actual.existe) { yaMudado = true; return { mudado: false, motivo: 'ya-estaba' }; }
 
   try {
     const { doc } = await leerBlob();
@@ -253,6 +260,7 @@ async function mudarSiHaceFalta() {
     if (!cuantos) return { mudado: false, motivo: 'blob-vacio' };
 
     await combinarPostgres(doc, doc.updatedAt || Date.now());
+    yaMudado = true;
     console.log('mudanza: %d registros del Blob a Postgres', cuantos);
     return { mudado: true, registros: cuantos };
   } catch (e) {
@@ -294,7 +302,7 @@ async function combinar(entrante, ahora) {
 /** Cierra la conexión. Sólo hace falta en las pruebas, para que el proceso
  *  pueda terminar; en la nube la instancia se duerme sola. */
 async function cerrar() {
-  if (pool) { await pool.end(); pool = null; tablaLista = false; }
+  if (pool) { await pool.end(); pool = null; tablaLista = false; yaMudado = false; }
 }
 
 module.exports = {
