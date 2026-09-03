@@ -1543,6 +1543,208 @@
       "fruta": false
     }
   ],
+  "rendimiento": {
+    "ingredientes": {
+      "az": {
+        "id": "az",
+        "name": "Azúcar",
+        "unit": "bolsa",
+        "quantity": 2,
+        "price": 3,
+        "unitSingle": "kg"
+      },
+      "le": {
+        "id": "le",
+        "name": "Leche",
+        "unit": "botella",
+        "quantity": 1,
+        "price": 2,
+        "unitSingle": "l"
+      },
+      "ba": {
+        "id": "ba",
+        "name": "Barras",
+        "unit": "caja",
+        "quantity": 24,
+        "price": 7,
+        "unitSingle": "u",
+        "unitWeight": 113,
+        "unitWeightUnit": "g"
+      }
+    },
+    "receta": {
+      "id": "r1",
+      "name": "Galletas",
+      "yield": 24,
+      "ingredients": [
+        {
+          "ingredientId": "az",
+          "qty": 200,
+          "unit": "g"
+        },
+        {
+          "ingredientId": "az",
+          "qty": 50,
+          "unit": "g"
+        },
+        {
+          "ingredientId": "le",
+          "qty": 100,
+          "unit": "ml"
+        },
+        {
+          "ingredientId": "ba",
+          "qty": 226,
+          "unit": "g"
+        }
+      ]
+    },
+    "casos": [
+      {
+        "in": {
+          "ing": "az",
+          "qty": 2,
+          "unit": "kg"
+        },
+        "out": {
+          "tandas": 8,
+          "tandasEnteras": 8,
+          "porciones": 192,
+          "porcionesEnteras": 192,
+          "gastaPorTanda": 250,
+          "disponible": 2000,
+          "falta": 0,
+          "sobra": 0,
+          "unidadBase": "g",
+          "alcanza": true
+        }
+      },
+      {
+        "in": {
+          "ing": "az",
+          "qty": 100,
+          "unit": "g"
+        },
+        "out": {
+          "tandas": 0.4,
+          "tandasEnteras": 0,
+          "porciones": 9.600000000000001,
+          "porcionesEnteras": 0,
+          "gastaPorTanda": 250,
+          "disponible": 100,
+          "falta": 150,
+          "sobra": 100,
+          "unidadBase": "g",
+          "alcanza": false
+        }
+      },
+      {
+        "in": {
+          "ing": "le",
+          "qty": 1,
+          "unit": "l"
+        },
+        "out": {
+          "tandas": 10,
+          "tandasEnteras": 10,
+          "porciones": 240,
+          "porcionesEnteras": 240,
+          "gastaPorTanda": 100,
+          "disponible": 1000,
+          "falta": 0,
+          "sobra": 0,
+          "unidadBase": "ml",
+          "alcanza": true
+        }
+      },
+      {
+        "in": {
+          "ing": "le",
+          "qty": 2,
+          "unit": "taza"
+        },
+        "out": {
+          "tandas": 4.8,
+          "tandasEnteras": 4,
+          "porciones": 115.19999999999999,
+          "porcionesEnteras": 96,
+          "gastaPorTanda": 100,
+          "disponible": 480,
+          "falta": 0,
+          "sobra": 80,
+          "unidadBase": "ml",
+          "alcanza": true
+        }
+      },
+      {
+        "in": {
+          "ing": "ba",
+          "qty": 24,
+          "unit": "u"
+        },
+        "out": {
+          "tandas": 12,
+          "tandasEnteras": 12,
+          "porciones": 288,
+          "porcionesEnteras": 288,
+          "gastaPorTanda": 2,
+          "disponible": 24,
+          "falta": 0,
+          "sobra": 0,
+          "unidadBase": "u",
+          "alcanza": true
+        }
+      },
+      {
+        "in": {
+          "ing": "ba",
+          "qty": 1,
+          "unit": "kg"
+        },
+        "out": {
+          "tandas": 4.424778761061947,
+          "tandasEnteras": 4,
+          "porciones": 106.19469026548671,
+          "porcionesEnteras": 96,
+          "gastaPorTanda": 2,
+          "disponible": 8.849557522123893,
+          "falta": 0,
+          "sobra": 0.8495575221238933,
+          "unidadBase": "u",
+          "alcanza": true
+        }
+      },
+      {
+        "in": {
+          "ing": "az",
+          "qty": 0,
+          "unit": "kg"
+        },
+        "out": null
+      }
+    ],
+    "usadoEn": [
+      {
+        "id": "az",
+        "recetas": [
+          "r1"
+        ]
+      },
+      {
+        "id": "le",
+        "recetas": [
+          "r1",
+          "r2"
+        ]
+      },
+      {
+        "id": "ba",
+        "recetas": [
+          "r1"
+        ]
+      }
+    ]
+  },
   "nutricionPendiente": [
     {
       "in": {

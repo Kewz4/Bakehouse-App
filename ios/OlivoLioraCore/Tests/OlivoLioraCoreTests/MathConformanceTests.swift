@@ -165,6 +165,27 @@ final class MathConformanceTests: XCTestCase {
         let periodos: PeriodosCase
         let nutricionPendiente: [PendienteCase]
         let faltaNutricion: [FaltaCase]
+        struct RendimientoCase: Decodable {
+            struct Entrada: Decodable { let ing: String; let qty: Double; let unit: String }
+            struct Salida: Decodable {
+                let tandas: Double; let tandasEnteras: Int
+                let porciones: Double; let porcionesEnteras: Double
+                let gastaPorTanda: Double; let disponible: Double
+                let falta: Double; let sobra: Double
+                let unidadBase: String; let alcanza: Bool
+            }
+            struct Caso: Decodable { let `in`: Entrada; let out: Salida? }
+            struct Linea: Decodable { let ingredientId: String; let qty: Double; let unit: String }
+            struct Receta: Decodable {
+                let id: String; let name: String; let yield: Double; let ingredients: [Linea]
+            }
+            struct Usado: Decodable { let id: String; let recetas: [String] }
+            let ingredientes: [String: JSONValue]
+            let receta: Receta
+            let casos: [Caso]
+            let usadoEn: [Usado]
+        }
+        let rendimiento: RendimientoCase
         let countLabel: [CountCase]
         let joinDetail: [JoinCase]
         let recipe: [RecipeCase]
@@ -538,6 +559,52 @@ final class MathConformanceTests: XCTestCase {
                 XCTAssertEqual(m.missing, c.faltan, "«\(c.in.name)»: cuántos faltan")
                 XCTAssertEqual(m.total, c.total, "«\(c.in.name)»: de cuántos")
             }
+        }
+    }
+
+    /// "Tengo esta bolsa de azúcar, ¿para cuántas tandas me da?"
+    ///
+    /// Incluye el caso difícil: un ingrediente que se compra por piezas y que
+    /// la receta pide en peso, y otro que aparece dos veces en la misma receta.
+    func testYieldMatchesJavaScript() throws {
+        let f = try load().rendimiento
+        let ingredients = ingredientesDeFixture(f.ingredientes)
+        let recipe = Recipe(id: f.receta.id, name: f.receta.name, yield: f.receta.yield,
+                            price: 0,
+                            lines: f.receta.ingredients.map {
+                                RecipeLine(ingredientId: $0.ingredientId, name: "x",
+                                           qty: $0.qty, unit: $0.unit, cost: 0)
+                            })
+
+        for c in f.casos {
+            let ing = try XCTUnwrap(ingredients[c.in.ing], "falta «\(c.in.ing)»")
+            let got = Analytics.yield(of: ing, amount: c.in.qty, unit: c.in.unit, for: recipe)
+            let que = "\(c.in.ing) \(c.in.qty) \(c.in.unit)"
+
+            guard let esperado = c.out else {
+                XCTAssertNil(got, "\(que): JavaScript no responde y Swift sí")
+                continue
+            }
+            let r = try XCTUnwrap(got, "\(que): Swift no responde y JavaScript sí")
+            XCTAssertEqual(r.batches, esperado.tandas, accuracy: 1e-6, "\(que): tandas")
+            XCTAssertEqual(r.wholeBatches, esperado.tandasEnteras, "\(que): tandas enteras")
+            XCTAssertEqual(r.servings, esperado.porciones, accuracy: 1e-6, "\(que): porciones")
+            XCTAssertEqual(r.wholeServings, esperado.porcionesEnteras, accuracy: 1e-6, "\(que): porciones enteras")
+            XCTAssertEqual(r.perBatch, esperado.gastaPorTanda, accuracy: 1e-6, "\(que): gasta por tanda")
+            XCTAssertEqual(r.available, esperado.disponible, accuracy: 1e-6, "\(que): disponible")
+            XCTAssertEqual(r.short, esperado.falta, accuracy: 1e-6, "\(que): falta")
+            XCTAssertEqual(r.leftover, esperado.sobra, accuracy: 1e-6, "\(que): sobra")
+            XCTAssertEqual(r.baseUnit, esperado.unidadBase, "\(que): unidad base")
+            XCTAssertEqual(r.isEnough, esperado.alcanza, "\(que): si alcanza")
+        }
+
+        // Y qué recetas se ofrecen para cada ingrediente.
+        let otra = Recipe(id: "r2", name: "Sin azúcar", yield: 4, price: 0,
+                          lines: [RecipeLine(ingredientId: "le", name: "x", qty: 50, unit: "ml", cost: 0)])
+        for u in f.usadoEn {
+            let ing = try XCTUnwrap(ingredients[u.id])
+            let got = Analytics.recipes(using: ing, from: [recipe, otra]).map(\.id)
+            XCTAssertEqual(got, u.recetas, "«\(u.id)»: recetas distintas")
         }
     }
 

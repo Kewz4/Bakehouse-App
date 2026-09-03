@@ -50,6 +50,26 @@ public enum ConversionVia: String, Sendable {
     case piece = "pieza"
 }
 
+/// Para cuántas tandas alcanza lo que hay en la despensa.
+public struct Yield: Sendable, Equatable {
+    /// Tandas exactas, con decimales.
+    public let batches: Double
+    /// Tandas de verdad: media hornada de galletas no existe.
+    public let wholeBatches: Int
+    public let servings: Double
+    public let wholeServings: Double
+    /// Cuánto gasta UNA tanda, en unidades base del ingrediente.
+    public let perBatch: Double
+    /// Lo que hay, en esas mismas unidades base.
+    public let available: Double
+    /// Lo que falta para completar una tanda. Cero si alcanza.
+    public let short: Double
+    /// Lo que sobra después de la última tanda entera.
+    public let leftover: Double
+    public let baseUnit: String
+    public var isEnough: Bool { batches >= 1 }
+}
+
 public struct Conversion: Sendable, Equatable {
     public let via: ConversionVia
     /// "200 g = 1.77 u"

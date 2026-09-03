@@ -285,6 +285,47 @@ const out = {
     return { in: u, amount: b.amount, unit: b.unit, etiqueta: b.etiqueta, factor: b.factor };
   }),
   kindOf: categorias.map(i => ({ in: i, kind: B.kindOf(i), fruta: B.esFruta(i) })),
+  rendimiento: (() => {
+    const ings = {
+      az: { id: 'az', name: 'Azúcar', unit: 'bolsa', quantity: 2, price: 3, unitSingle: 'kg' },
+      le: { id: 'le', name: 'Leche', unit: 'botella', quantity: 1, price: 2, unitSingle: 'l' },
+      ba: { id: 'ba', name: 'Barras', unit: 'caja', quantity: 24, price: 7,
+            unitSingle: 'u', unitWeight: 113, unitWeightUnit: 'g' }
+    };
+    const receta = { id: 'r1', name: 'Galletas', yield: 24, ingredients: [
+      { ingredientId: 'az', qty: 200, unit: 'g' },
+      { ingredientId: 'az', qty: 50,  unit: 'g' },   // el mismo ingrediente dos veces
+      { ingredientId: 'le', qty: 100, unit: 'ml' },
+      { ingredientId: 'ba', qty: 226, unit: 'g' }    // se compra por piezas, se pide en peso
+    ]};
+    const otra = { id: 'r2', name: 'Sin azúcar', yield: 4, ingredients: [
+      { ingredientId: 'le', qty: 50, unit: 'ml' }
+    ]};
+    const casos = [
+      { ing: 'az', qty: 2,   unit: 'kg' },
+      { ing: 'az', qty: 100, unit: 'g' },     // no alcanza ni para una
+      { ing: 'le', qty: 1,   unit: 'l' },
+      { ing: 'le', qty: 2,   unit: 'taza' },
+      { ing: 'ba', qty: 24,  unit: 'u' },     // piezas -> peso
+      { ing: 'ba', qty: 1,   unit: 'kg' },
+      { ing: 'az', qty: 0,   unit: 'kg' }     // sin cantidad: no hay respuesta
+    ];
+    return {
+      ingredientes: ings,
+      receta: receta,
+      casos: casos.map(c => {
+        const r = B.rendimiento(ings[c.ing], c.qty, c.unit, receta);
+        return { in: c, out: r && {
+          tandas: r.tandas, tandasEnteras: r.tandasEnteras,
+          porciones: r.porciones, porcionesEnteras: r.porcionesEnteras,
+          gastaPorTanda: r.gastaPorTanda, disponible: r.disponible,
+          falta: r.falta, sobra: r.sobra, unidadBase: r.unidadBase, alcanza: r.alcanza } };
+      }),
+      // Qué recetas usan cada ingrediente.
+      usadoEn: Object.keys(ings).map(k => ({
+        id: k, recetas: B.recetasCon(ings[k], [receta, otra]).map(r => r.id) }))
+    };
+  })(),
   nutricionPendiente: badgeRecipes.map(r => {
     const p = B.nutricionPendiente(r, badgeIngredients);
     return { in: r, falta: !!p && !p.vacia, faltan: p ? p.faltan : 0,
@@ -336,6 +377,7 @@ console.log('parseQty:%d prettyQty:%d baseCost:%d recipe:%d macroRecipes:%d -> %
   out.parseQty.length, out.prettyQty.length, out.baseCost.length, out.recipe.length,
   out.macroRecipes.length, path.relative(process.cwd(), OUT));
 console.log('badgeRecipes:%d countLabel:%d joinDetail:%d', out.badgeRecipes.length, out.countLabel.length, out.joinDetail.length);
+console.log('rendimiento:%d', out.rendimiento.casos.length);
 console.log('periodos:%d nutriciónPendiente:%d faltaNutrición:%d', out.periodos.casos.length,
   out.nutricionPendiente.length, out.faltaNutricion.length);
 console.log('gastos: cantidades:%d mes:%s inicio:%s',

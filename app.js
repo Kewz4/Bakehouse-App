@@ -341,6 +341,72 @@ function quickFromRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)retur
  * el que nadie se sabe de memoria.
  */
 let calcReceta=null;
+/**
+ * "Tengo esta bolsa de azúcar, ¿para cuántas tandas me da?"
+ *
+ * La misma ventana que la calculadora de precio, para que no parezcan dos
+ * herramientas distintas. Se abre desde la lista de ingredientes, y desde una
+ * fila concreta ya viene elegido el ingrediente.
+ */
+function abrirRendimiento(ingId){
+ const ings=data.ingredients.filter(x=>recetasCon(x,data.recipes).length);
+ if(!ings.length)return toast('Primero crea una receta que use alguno de tus ingredientes.',true);
+ const elegido=ings.find(x=>x.id===ingId)||ings[0];
+ openModal('¿Para cuánto me alcanza?',`
+  <p class="helper">Dime cuánto tienes y para qué receta, y te digo cuántas tandas salen.</p>
+  <div class="form-grid">
+   <div class="field full"><label>¿De qué ingrediente?</label>
+    <select id="rendIng" onchange="rendCambiaIngrediente()">
+     ${ings.map(x=>`<option value="${x.id}" ${x.id===elegido.id?'selected':''}>${esc(x.name)}</option>`).join('')}
+    </select></div>
+   <div class="field"><label>¿Cuánto tienes?</label>
+    <input id="rendQty" type="text" readonly data-pad="1" placeholder="toca para escribir"
+     value="${prettyQty(elegido.quantity||1)}" onfocus="openPad(this)" onclick="openPad(this)" oninput="calcularRendimiento()"></div>
+   <div class="field"><label>¿En qué medida?</label>
+    <select id="rendUnit" onchange="calcularRendimiento()">${unitOptionsFor(elegido,elegido.unitSingle)}</select></div>
+   <div class="field full"><label>¿Para qué receta?</label>
+    <select id="rendReceta" onchange="calcularRendimiento()">${opcionesReceta(elegido)}</select></div>
+  </div>
+  <div class="calc-result pop"><span id="rendCaption">Te alcanza para</span><strong id="rendOut">—</strong></div>
+  <p class="calc-warning info" id="rendNota"></p>
+  <div class="modal-actions"><button class="btn alt" onclick="closeModal()">Cerrar</button></div>`);
+ calcularRendimiento()}
+
+const opcionesReceta=ing=>recetasCon(ing,data.recipes)
+ .map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('');
+
+/** Al cambiar de ingrediente cambian sus unidades y sus recetas. */
+function rendCambiaIngrediente(){
+ const ing=data.ingredients.find(x=>x.id===$('#rendIng').value);
+ if(!ing)return;
+ $('#rendUnit').innerHTML=unitOptionsFor(ing,ing.unitSingle);
+ $('#rendReceta').innerHTML=opcionesReceta(ing);
+ $('#rendQty').value=prettyQty(ing.quantity||1);
+ calcularRendimiento()}
+
+function calcularRendimiento(){
+ const ing=data.ingredients.find(x=>x.id===($('#rendIng')||{}).value);
+ const receta=data.recipes.find(r=>r.id===($('#rendReceta')||{}).value);
+ const cant=parseQty(($('#rendQty')||{}).value||'');
+ const out=$('#rendOut'),cap=$('#rendCaption'),nota=$('#rendNota');
+ if(!out)return;
+ const r=rendimiento(ing,cant,($('#rendUnit')||{}).value,receta);
+ if(!r){
+  cap.textContent='Te alcanza para';
+  out.textContent='—';
+  nota.textContent=cant>0?'Con esa medida no puedo hacer la cuenta.':'Escribe cuánto tienes.';
+  return}
+ if(!r.alcanza){
+  cap.textContent='No alcanza ni para una';
+  out.textContent=`faltan ${prettyQty(+r.falta.toFixed(1))} ${esc(r.unidadBase)}`;
+  nota.textContent=`Una tanda de ${esc(receta.name)} gasta ${prettyQty(+r.gastaPorTanda.toFixed(1))} ${esc(r.unidadBase)} de ${esc(ing.name)}.`;
+  return}
+ cap.textContent='Te alcanza para';
+ out.textContent=`${r.tandasEnteras} ${r.tandasEnteras===1?'tanda':'tandas'} · ${prettyQty(r.porcionesEnteras)} porciones`;
+ nota.textContent=joinDetail([
+  `Cada tanda gasta ${prettyQty(+r.gastaPorTanda.toFixed(1))} ${r.unidadBase} de ${ing.name}`,
+  r.sobra>0.05?`te sobran ${prettyQty(+r.sobra.toFixed(1))} ${r.unidadBase}`:null])}
+
 function abrirCalculadora(costo,nombre,recetaId){
  calcReceta=recetaId||null;
  openModal('¿Cuánto cobrar?',`
@@ -412,7 +478,7 @@ $('#ingredientRows').innerHTML=ing.map(x=>{const k=KINDS.find(z=>z.k===kindOf(x)
  const sale=costBreakdown(x).map(c=>money(c.amount)+' / '+esc(c.unit)).join('<br>');
  const trae=x.unitWeight?` · cada uno ${prettyQty(x.unitWeight)} ${esc(unitInfo(x.unitWeightUnit||'g').s)}`:'';
  const sinNutri=faltaNutricion(x)?'<span class="falta" title="Sin información nutricional">sin nutrición</span>':'';
- return `<tr><td class="main"><b>${k.emoji} ${esc(x.name)}</b>${sinNutri}</td><td data-label="Cómo lo compras">${esc(x.unit)} de ${esc(x.quantity)} ${esc(unitInfo(x.unitSingle).s)}${trae}</td><td data-label="Te costó">${money(x.price)}</td><td class="amount" data-label="Sale a">${sale}</td><td class="actions"><button class="icon-btn" onclick="openIngredient('${x.id}')" aria-label="Editar ingrediente">✎</button><button class="icon-btn" onclick="removeItem('ingredients','${x.id}')" aria-label="Eliminar ingrediente">×</button></td></tr>`}).join('');
+ return `<tr><td class="main"><b>${k.emoji} ${esc(x.name)}</b>${sinNutri}</td><td data-label="Cómo lo compras">${esc(x.unit)} de ${esc(x.quantity)} ${esc(unitInfo(x.unitSingle).s)}${trae}</td><td data-label="Te costó">${money(x.price)}</td><td class="amount" data-label="Sale a">${sale}</td><td class="actions"><button class="icon-btn" onclick="abrirRendimiento('${x.id}')" aria-label="¿Para cuánto alcanza?" title="¿Para cuánto alcanza?">⚖</button><button class="icon-btn" onclick="openIngredient('${x.id}')" aria-label="Editar ingrediente">✎</button><button class="icon-btn" onclick="removeItem('ingredients','${x.id}')" aria-label="Eliminar ingrediente">×</button></td></tr>`}).join('');
 $('#ingredientsEmpty').style.display=ing.length?'none':'block';
 setCount('#ingCount',ing.length,data.ingredients.length,'guardado','guardados')}
 function renderChart(){const src=(window.ALLDATA&&window.ALLDATA.sales)||data.sales;const now=new Date(),vals=[0,0,0,0,0,0],labels=[];

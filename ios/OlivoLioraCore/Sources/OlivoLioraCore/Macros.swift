@@ -109,6 +109,51 @@ public struct RecipeMacros: Sendable {
 
 public extension Analytics {
 
+    /// Para cuántas veces alcanza lo que hay.
+    ///
+    /// La pregunta de la despensa: "tengo esta bolsa de azúcar, ¿para cuántas
+    /// tandas de galletas me da?". Réplica exacta de `rendimiento()` en
+    /// business-core.js.
+    ///
+    /// Devuelve nil cuando la pregunta no se puede responder sin inventarse un
+    /// dato: si la receta no lleva ese ingrediente, o si la unidad en que se
+    /// tiene no se puede convertir a la que pide la receta.
+    static func yield(of ing: Ingredient, amount: Double, unit: String,
+                      for recipe: Recipe) -> Yield? {
+        guard amount > 0,
+              let fTengo = ing.unitFactor(unit.isEmpty ? ing.unitSingle : unit) else { return nil }
+        let available = amount * fTengo.factor
+
+        // Una receta puede pedir el mismo ingrediente dos veces: en la masa y
+        // por encima. Se suman todas sus líneas.
+        var perBatch = 0.0
+        var lineas = 0
+        for l in recipe.lines where l.ingredientId == ing.id {
+            guard let f = ing.unitFactor(l.unit.isEmpty ? ing.unitSingle : l.unit) else { continue }
+            perBatch += l.qty * f.factor
+            lineas += 1
+        }
+        guard lineas > 0, perBatch > 0 else { return nil }
+
+        let batches = available / perBatch
+        let servings = max(recipe.yield, 1)
+        let enteras = Int(batches.rounded(.down))
+        return Yield(batches: batches,
+                     wholeBatches: enteras,
+                     servings: batches * servings,
+                     wholeServings: Double(enteras) * servings,
+                     perBatch: perBatch,
+                     available: available,
+                     short: max(0, perBatch - available),
+                     leftover: available - Double(enteras) * perBatch,
+                     baseUnit: Units.base(Units.family(ing.unitSingle)).short)
+    }
+
+    /// Las recetas que usan este ingrediente. Las demás no se ofrecen.
+    static func recipes(using ing: Ingredient, from recipes: [Recipe]) -> [Recipe] {
+        recipes.filter { r in r.lines.contains { $0.ingredientId == ing.id } }
+    }
+
     /// Suma los macros de una receta.
     ///
     /// Sólo cuentan las líneas enlazadas a un ingrediente que tenga datos. Las

@@ -551,6 +551,62 @@ function desgloseGastos(lista,desde,hasta){
  out.total=out.operativo+out.inversion;
  return out}
 
+/**
+ * Para cuántas veces alcanza lo que hay.
+ *
+ * La pregunta es la de la despensa: "tengo esta bolsa de azúcar, ¿para cuántas
+ * tandas de galletas me da?". Se elige un ingrediente guardado, cuánto se tiene
+ * y en qué unidad, y una receta que lo use.
+ *
+ * Devuelve tandas ENTERAS además del número exacto, porque media tanda de
+ * galletas no existe: o alcanza para otra hornada o no alcanza.
+ *
+ * Devuelve null cuando la pregunta no se puede responder sin inventarse un
+ * dato: si la receta no lleva ese ingrediente, o si la unidad en que se tiene
+ * no se puede convertir a la que pide la receta (de mililitros a gramos hace
+ * falta la densidad).
+ */
+function rendimiento(ing,cantidad,unidad,receta){
+ if(!ing||!receta)return null;
+ const tengo=+cantidad||0;
+ if(!(tengo>0))return null;
+
+ // Lo que hay, en unidades base del ingrediente.
+ const fTengo=unitFactor(ing,unidad||ing.unitSingle);
+ if(!fTengo)return null;
+ const disponible=tengo*fTengo.factor;
+
+ // Lo que pide la receta de ese ingrediente, sumando todas sus líneas: una
+ // receta puede pedir azúcar dos veces, en la masa y por encima.
+ let porTanda=0,lineas=0;
+ ((receta&&receta.ingredients)||[]).forEach(l=>{
+  if(l.ingredientId!==ing.id)return;
+  const f=unitFactor(ing,l.unit||ing.unitSingle);
+  if(!f)return;
+  porTanda+=(+l.qty||0)*f.factor;lineas++});
+ if(!lineas||!(porTanda>0))return null;
+
+ const tandas=disponible/porTanda;
+ const porciones=(+receta.yield||1)||1;
+ const base=baseUnit(unitFamily(ing.unitSingle||'g'));
+ return {tandas:tandas,
+         disponible:disponible,
+         falta:Math.max(0,porTanda-disponible),
+         tandasEnteras:Math.floor(tandas),
+         porciones:tandas*porciones,
+         porcionesEnteras:Math.floor(tandas)*porciones,
+         gastaPorTanda:porTanda,
+         unidadBase:base.s,
+         // Lo que sobra después de la última tanda entera, para que no parezca
+         // que se tira.
+         sobra:disponible-Math.floor(tandas)*porTanda,
+         alcanza:tandas>=1}}
+
+/** Las recetas que usan este ingrediente. Las demás no se ofrecen. */
+function recetasCon(ing,recetas){
+ if(!ing)return [];
+ return (recetas||[]).filter(r=>((r&&r.ingredients)||[]).some(l=>l.ingredientId===ing.id))}
+
 // ---------------------------------------------------------------------------
 // Períodos
 // ---------------------------------------------------------------------------
@@ -801,5 +857,6 @@ return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS
         cantidadDe:cantidadDe, montoBase:montoBase,
         desgloseGastos:desgloseGastos, desdeElInicio:desdeElInicio,
         PERIODOS:PERIODOS, rangoDePeriodo:rangoDePeriodo,
+        rendimiento:rendimiento, recetasCon:recetasCon,
         fijarAhora:fijarAhora};
 });

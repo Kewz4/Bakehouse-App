@@ -9,6 +9,8 @@ struct IngredientsView: View {
     @State private var creating = false
     /// Qué categoría se está mirando. `nil` = todas.
     @State private var kindFilter: IngredientKind?
+    /// El ingrediente cuyo rendimiento se está mirando.
+    @State private var rindiendo: Ingredient?
 
     private var filtered: [Ingredient] {
         let q = search.trimmingCharacters(in: .whitespaces).lowercased()
@@ -55,6 +57,18 @@ struct IngredientsView: View {
                             .foregroundStyle(Theme.muted)
                     }
                     Spacer(minLength: 8)
+
+                    // Sólo tiene sentido preguntarlo si está en alguna receta.
+                    if !Analytics.recipes(using: ing, from: store.recipes).isEmpty {
+                        Button { rindiendo = ing } label: {
+                            Image(systemName: "scalemass")
+                                .font(.system(size: 15))
+                                .foregroundStyle(Theme.green)
+                                .frame(width: 34, height: 34)
+                        }
+                        .buttonStyle(.plain)
+                    }
+
                     // Puede decir dos cosas: por pieza y por peso.
                     VStack(alignment: .trailing, spacing: 4) {
                         ForEach(Array(ing.costBreakdown.enumerated()), id: \.offset) { i, cost in
@@ -80,6 +94,7 @@ struct IngredientsView: View {
         }
         .sheet(isPresented: $creating) { IngredientEditor(ingredient: nil) }
         .sheet(item: $editing) { IngredientEditor(ingredient: $0) }
+        .sheet(item: $rindiendo) { YieldSheet(ingredient: $0) }
     }
 
     /// Las pestañas de categoría, con cuántos hay de cada una.
@@ -554,5 +569,162 @@ struct IngredientEditor: View {
         record.setKind(kind)
         store.save(record)
         dismiss()
+    }
+}
+
+/// "Tengo esta bolsa de azúcar, ¿para cuántas tandas me da?"
+///
+/// La misma ventana que la calculadora de precio, para que no parezcan dos
+/// herramientas distintas: se abre igual, se cierra igual y el resultado se lee
+/// en el mismo recuadro burdeos.
+struct YieldSheet: View {
+    @Environment(AppStore.self) private var store
+    @Environment(\.dismiss) private var dismiss
+
+    let ingredient: Ingredient
+
+    @State private var cantidad: String
+    @State private var unidad: String
+    @State private var recetaId: String = ""
+
+    init(ingredient: Ingredient) {
+        self.ingredient = ingredient
+        _cantidad = State(initialValue: Quantity.pretty(ingredient.quantity))
+        _unidad = State(initialValue: ingredient.unitSingle)
+    }
+
+    /// Sólo las recetas que de verdad usan este ingrediente: ofrecer las demás
+    /// sería ofrecer una pregunta sin respuesta.
+    private var recetas: [Recipe] {
+        Analytics.recipes(using: ingredient, from: store.recipes)
+    }
+
+    /// Las unidades a las que se puede convertir sin inventarse la densidad.
+    private var unidades: [(key: String, name: String)] {
+        Units.all.filter { ingredient.unitFactor($0.key) != nil }
+            .map { (key: $0.key, name: $0.name) }
+    }
+
+    private var receta: Recipe? {
+        recetas.first { $0.id == recetaId } ?? recetas.first
+    }
+
+    private var resultado: Yield? {
+        guard let r = receta else { return nil }
+        return Analytics.yield(of: ingredient, amount: Quantity.parse(cantidad),
+                               unit: unidad, for: r)
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("Dime cuánto tienes y para qué receta, y te digo cuántas tandas salen.")
+                        .font(Theme.rounded(12))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    QuantityField(label: "¿Cuánto tienes de \(ingredient.name)?",
+                                  text: $cantidad,
+                                  unitShort: Units.info(unidad).short)
+
+                    menuCampo("¿En qué medida?", seleccion: $unidad,
+                              opciones: unidades.map { ($0.key, $0.name) })
+
+                    menuCampo("¿Para qué receta?", seleccion: Binding(
+                        get: { receta?.id ?? "" },
+                        set: { recetaId = $0 }),
+                              opciones: recetas.map { ($0.id, $0.name) })
+
+                    resultadoCard
+                }
+                .padding(16)
+            }
+            .background(Theme.cream)
+            .scrollIndicators(.hidden)
+            .navigationTitle("¿Para cuánto alcanza?")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cerrar") { dismiss() }.tint(Theme.muted)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+    }
+
+    @ViewBuilder
+    private var resultadoCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(titulo)
+                .font(Theme.rounded(12))
+                .foregroundStyle(.white.opacity(0.75))
+            Text(cifra)
+                .font(Theme.rounded(24, .heavy))
+                .foregroundStyle(.white)
+                .minimumScaleFactor(0.6)
+                .lineLimit(1)
+                .contentTransition(.numericText())
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(17)
+        .background(Theme.green, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+        .animation(.snappy(duration: 0.25), value: cifra)
+
+        if let nota {
+            Text(nota)
+                .font(Theme.rounded(12))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var titulo: String {
+        guard let r = resultado else { return "Te alcanza para" }
+        return r.isEnough ? "Te alcanza para" : "No alcanza ni para una"
+    }
+
+    private var cifra: String {
+        guard let r = resultado else { return "—" }
+        if !r.isEnough {
+            return "faltan \(Quantity.pretty((r.short * 10).rounded() / 10)) \(r.baseUnit)"
+        }
+        let tandas = r.wholeBatches == 1 ? "1 tanda" : "\(r.wholeBatches) tandas"
+        return "\(tandas) · \(Quantity.pretty(r.wholeServings)) porciones"
+    }
+
+    private var nota: String? {
+        guard let r = resultado, let receta else {
+            return Quantity.parse(cantidad) > 0
+                ? "Con esa medida no puedo hacer la cuenta."
+                : "Escribe cuánto tienes."
+        }
+        let gasta = "Cada tanda de \(receta.name) gasta "
+            + "\(Quantity.pretty((r.perBatch * 10).rounded() / 10)) \(r.baseUnit) de \(ingredient.name)"
+        guard r.isEnough else { return gasta + "." }
+        let sobra = r.leftover > 0.05
+            ? "te sobran \(Quantity.pretty((r.leftover * 10).rounded() / 10)) \(r.baseUnit)"
+            : nil
+        return Labels.join(gasta, sobra)
+    }
+
+    /// Un desplegable con la misma pinta que los del resto de la app.
+    private func menuCampo(_ label: String, seleccion: Binding<String>,
+                           opciones: [(String, String)]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label).font(Theme.rounded(12, .bold)).foregroundStyle(Theme.muted)
+            Picker(label, selection: seleccion) {
+                ForEach(opciones, id: \.0) { Text($0.1).tag($0.0) }
+            }
+            .pickerStyle(.menu)
+            .tint(Theme.green)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 12)
+            .frame(height: 46)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Theme.line, lineWidth: 1))
+        }
     }
 }
