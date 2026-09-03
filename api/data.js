@@ -26,6 +26,31 @@ function parseBody(req) {
   return req.body && typeof req.body === 'object' ? req.body : null;
 }
 
+/** ¿Se pidió ver por qué el almacén es el que es? Sólo para diagnosticar. */
+function depurar(req) {
+  try {
+    return new URL(req.url, 'https://olivo-liora.vercel.app')
+      .searchParams.get('debug') === '1';
+  } catch (e) { return false; }
+}
+
+/**
+ * Por qué está usando el almacén que usa.
+ *
+ * Sólo los NOMBRES de las variables, nunca sus valores. Sirve para distinguir
+ * "no está conectada" de "está conectada con otro nombre" o "está conectada
+ * pero no se ha redesplegado", que desde fuera se ven exactamente igual — y
+ * distinguirlas a ciegas cuesta una tarde.
+ */
+function diagnostico() {
+  return {
+    almacen: Store.almacen(),
+    postgres: Store.hayPostgres(),
+    blob: Store.hayBlob(),
+    vars: Object.keys(process.env).filter(k => /BLOB|POSTGRES|DATABASE|NEON/.test(k)).sort()
+  };
+}
+
 /** El `?desde=` de la petición, si trae uno válido. */
 function desdeCuando(req) {
   try {
@@ -75,7 +100,8 @@ module.exports = async function handler(req, res) {
       }
 
       return res.status(200).json({
-        enabled: true, doc, updatedAt: actualizado, almacen: Store.almacen()
+        enabled: true, doc, updatedAt: actualizado, almacen: Store.almacen(),
+        diagnostico: depurar(req) ? diagnostico() : undefined
       });
     }
 
