@@ -11,65 +11,68 @@ Lo que se anota en una aparece en la otra sin tocar nada.
 
 ---
 
-## Estado del despliegue
+## Dónde viven los datos
 
-**Hecho:**
+Los datos van a una **base Postgres** si el proyecto tiene una conectada, y al
+**Blob de Vercel** si no. Lo decide `store-core.js` y no se nota desde fuera.
 
-- Este código está publicado en producción (`/sync-core.js` responde 200).
-- Repositorio conectado a Vercel; rama `main` creada con este código.
-- Blob Store creado y conectado al proyecto — `store_cFMIRAZHGAS7bOLQ`, público.
+### Por qué se mudó
 
-**Falta una cosa, y es la última:** el proyecto tiene el store conectado pero
-**sin permiso de escritura**.
+El Blob cobra por **operación**, y leer cuesta una: cada lectura hace un
+`list()` del almacén. La app pregunta cada 30 segundos mientras está abierta,
+desde dos teléfonos y desde la web — miles de operaciones al mes sin que nadie
+haya tocado nada. Ése era el límite que estaba a punto de llegar, no el espacio:
+todos los datos juntos ocupan 16 kB.
 
-```bash
-curl -s https://olivo-liora.vercel.app/api/data
-# {"enabled":false, …, "blobVars":["BLOB_STORE_ID","BLOB_WEBHOOK_PUBLIC_KEY"]}
-```
+En Postgres leer es una consulta y no se cobra por operación.
 
-Esas dos variables demuestran que la conexión existe. La que falta es
-`BLOB_READ_WRITE_TOKEN`, que es la única que permite *guardar*. Sin ella se
-podría leer, pero no escribir, así que la app sigue en modo "guardado aquí".
+De paso quedó más simple. Los trozos que nunca se pisan existían por una sola
+razón: un blob público se sirve desde el CDN, y al sobrescribirlo la URL no
+cambia, así que una lectura podía devolver una copia vieja (se midieron 33
+segundos de retraso) y combinar contra datos viejos **perdía** lo que el otro
+teléfono acababa de escribir. Postgres no tiene ese problema, así que ya no hay
+trozos ni compactación: hay una fila.
 
-### Cómo arreglarlo
+### Cómo conectarla
 
-**Opción A — reconectar con permiso de escritura**
+1. Vercel → proyecto `olivo-liora` → **Storage** → **Create Database** →
+   **Neon** (Postgres). El plan gratuito sobra: esto ocupa kilobytes.
+2. Conéctala al proyecto. Vercel añade sola la variable `DATABASE_URL`.
+3. **Redespliega** — añadir una variable no redespliega solo:
+   *Deployments* → el último → `⋯` → **Redeploy**.
 
-1. Vercel → **Storage** → tu Blob Store → pestaña de proyectos conectados.
-2. En `olivo-liora`, comprueba que esté como **Read and write**, no *Read only*.
-   Si está en solo lectura: desconecta y vuelve a conectar eligiendo lectura y
-   escritura.
+Y ya. **La mudanza se hace sola:** la primera vez que se lee con la base
+conectada y todavía vacía, los datos se traen del Blob y se guardan. No hay que
+exportar ni importar nada, y no hay un momento en que la app deje de funcionar.
 
-**Opción B — añadir la variable a mano** (siempre funciona)
-
-1. Vercel → **Storage** → tu Blob Store → sección de tokens / `.env.local`.
-   Copia el valor de `BLOB_READ_WRITE_TOKEN` (empieza por `vercel_blob_rw_…`).
-2. Proyecto `olivo-liora` → **Settings** → **Environment Variables** → añade
-   `BLOB_READ_WRITE_TOKEN` con ese valor, marcando *Production*, *Preview* y
-   *Development*.
-3. **Redespliega.** Añadir una variable no redespliega solo:
-   *Deployments* → el último → menú `⋯` → **Redeploy**.
-
-> Si al conectar el store le pusiste un prefijo y la variable quedó como
-> `ALGO_BLOB_READ_WRITE_TOKEN`, también sirve: el código acepta cualquier
-> variable cuyo nombre termine en `BLOB_READ_WRITE_TOKEN`.
-
-### Comprobar que quedó
+Se puede comprobar:
 
 ```bash
-curl -s https://olivo-liora.vercel.app/api/data
-# {"enabled":true,"doc":{…},"updatedAt":…}
+curl -s https://olivo-liora.vercel.app/api/data | head -c 120
+# {"enabled":true,"doc":{...},"updatedAt":...,"almacen":"postgres"}
 ```
 
-Con eso en verde: abre la web en la laptop y en el teléfono, anota una venta en
-uno y espera unos segundos. Aparece en el otro.
+`almacen` dice cuál de los dos está usando. Mientras diga `blob`, sigue
+funcionando exactamente como antes — el código nuevo no cambia nada hasta que
+haya una base conectada.
 
-> Nota sobre el almacén público: el documento queda legible para cualquiera que
-> conozca su dirección
-> (`…public.blob.vercel-storage.com/datos/olivo-liora.json`). Fue una decisión
-> tomada a propósito por simplicidad. Si algún día quieres cerrarlo, es cambiar
-> `api/data.js` a un store privado y leerlo con el SDK.
+Sirve cualquier Postgres, no sólo Neon: se aceptan `DATABASE_URL`,
+`POSTGRES_URL`, `POSTGRES_PRISMA_URL`, `POSTGRES_URL_NON_POOLING` y
+`NEON_DATABASE_URL`.
 
+### Que dos teléfonos no se pisen
+
+El `PUT` no sobrescribe: el servidor lee lo que hay, lo combina registro por
+registro y guarda el resultado. En Postgres, además, la escritura sólo entra si
+nadie tocó la fila mientras tanto; si alguien la tocó, se vuelve a leer y a
+combinar. Como combinar es conmutativo, asociativo e idempotente, reintentar
+siempre da el resultado correcto.
+
+### Y menos datos móviles
+
+La app manda `?desde=<marca>` en cada consulta. Si nada ha cambiado, el servidor
+contesta `{"sinCambios":true}` en lugar del documento entero. Preguntar cada 30
+segundos costaba 16 kB cada vez, a dos teléfonos, todo el día.
 ---
 
 ## Información nutricional y etiquetas de dieta
@@ -223,11 +226,20 @@ solo lado sin enterarse.
 ## Pruebas
 
 ```bash
-npm test          # motor de combinación + endpoint /api/data (26 pruebas)
-npm run test:e2e  # dos navegadores contra un servidor (8 pruebas)
+npm test          # motor de combinación, endpoint /api/data y almacén
+npm run test:db   # sólo el almacén (necesita DATABASE_URL)
+npm run test:e2e  # dos navegadores contra un servidor
 npm run dev       # servidor local en :4321 con sincronización en memoria
 
-cd ios/OlivoLioraCore && swift test   # núcleo de iOS (21 pruebas)
+cd ios/OlivoLioraCore && swift test   # núcleo de iOS
+```
+
+Las pruebas del almacén necesitan un Postgres de verdad y **se saltan solas**
+si no hay `DATABASE_URL`, para que `npm test` no falle en una máquina que no
+tiene base. En CI se levanta uno y sí se corren. Para pasarlas en local:
+
+```bash
+DATABASE_URL=postgres://usuario@localhost:5432/olivo npm test
 ```
 
 `test/two-devices.test.js` es la que corresponde a lo que se pidió: levanta la
@@ -426,6 +438,8 @@ mismos datos dan los mismos números en los dos lados.
 ```
 index.html  app.js  styles.css  sw.js      la PWA
 sync-core.js                               la regla de combinación (web + servidor)
+business-core.js                           las cuentas del negocio (web + servidor)
+store-core.js                              dónde se guarda: Postgres, o el Blob
 api/data.js                                lee, combina y guarda
 api/upload.js                              fotos
 api/app-version.js  api/manifest.js        qué versión hay y cómo instalarla

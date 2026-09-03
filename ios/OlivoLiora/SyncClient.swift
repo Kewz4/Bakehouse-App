@@ -75,6 +75,8 @@ actor SyncClient {
     struct Response {
         let enabled: Bool
         let doc: SyncDocument?
+        /// El servidor dijo "nada ha cambiado" y no mandó el documento.
+        var sinCambios = false
     }
 
     private let session: URLSession
@@ -91,7 +93,17 @@ actor SyncClient {
     private struct Envelope: Decodable {
         let enabled: Bool
         let doc: SyncDocument?
+        let updatedAt: Double?
+        let sinCambios: Bool?
     }
+
+    /// Lo último que el servidor dijo tener.
+    ///
+    /// Se le manda de vuelta en cada consulta para que pueda contestar "nada ha
+    /// cambiado" sin mandar el documento entero. La app pregunta cada 30
+    /// segundos y casi siempre la respuesta es esa: mandar 16 kB para decirlo
+    /// era gastarle los datos móviles sin motivo.
+    private var vistoEn: Double = 0
 
     /// Sube el documento y recibe de vuelta el ya combinado con lo de los demás
     /// dispositivos. Un solo viaje hace subida y bajada.
@@ -104,19 +116,28 @@ actor SyncClient {
         let (data, response) = try await session.data(for: req)
         try check(response)
         let env = try JSONDecoder().decode(Envelope.self, from: data)
+        if let t = env.updatedAt { vistoEn = t }
         return Response(enabled: env.enabled, doc: env.doc)
     }
 
     /// Baja lo que hay en el servidor sin subir nada.
     func pull() async throws -> Response {
-        var req = URLRequest(url: Config.dataURL)
+        var url = Config.dataURL
+        if vistoEn > 0,
+           var c = URLComponents(url: url, resolvingAgainstBaseURL: false) {
+            c.queryItems = [URLQueryItem(name: "desde", value: String(Int64(vistoEn)))]
+            url = c.url ?? url
+        }
+        var req = URLRequest(url: url)
         req.httpMethod = "GET"
         req.cachePolicy = .reloadIgnoringLocalCacheData
 
         let (data, response) = try await session.data(for: req)
         try check(response)
         let env = try JSONDecoder().decode(Envelope.self, from: data)
-        return Response(enabled: env.enabled, doc: env.doc)
+        if let t = env.updatedAt { vistoEn = t }
+        return Response(enabled: env.enabled, doc: env.doc,
+                        sinCambios: env.sinCambios == true)
     }
 
     /// Sube una foto y devuelve su dirección definitiva.

@@ -4,13 +4,15 @@
   "private": true,
   "description": "PWA de control de negocio para la repostería Olivo & Liora.",
   "dependencies": {
-    "@vercel/blob": "^0.27.0"
+    "@vercel/blob": "^0.27.0",
+    "pg": "^8.23.0"
   },
   "scripts": {
-    "test": "node --test test/sync-core.test.js test/api-data.test.js test/ota.test.js test/macros.test.js",
+    "test": "node --test test/sync-core.test.js test/api-data.test.js test/ota.test.js test/macros.test.js test/store.test.js",
     "test:e2e": "node --test --test-concurrency=1 test/two-devices.test.js",
     "dev": "node test/dev-server.js 4321",
-    "fixtures": "node test/make-conformance-fixtures.js && node test/make-math-fixtures.js"
+    "fixtures": "node test/make-conformance-fixtures.js && node test/make-math-fixtures.js",
+    "test:db": "node --test test/store.test.js"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

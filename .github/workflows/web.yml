@@ -10,14 +10,33 @@ jobs:
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+
+    # Una base de verdad para las pruebas del almacén. Sin esto se saltan solas
+    # y la migración quedaría sin probar justo donde importa.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: olivo
+          POSTGRES_PASSWORD: olivo
+          POSTGRES_DB: olivo
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
 
-      - name: Pruebas del motor de combinación y del endpoint
+      - name: Pruebas del motor de combinación, del endpoint y del almacén
         run: npm test
+        env:
+          DATABASE_URL: postgres://olivo:olivo@localhost:5432/olivo?sslmode=disable
 
       - name: Instalar navegador para las pruebas de dos dispositivos
         run: |

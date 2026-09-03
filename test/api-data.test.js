@@ -10,6 +10,14 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
+// Este fichero prueba el camino del BLOB, con el almacén simulado de abajo. Si
+// la máquina tiene una base de datos configurada, el endpoint elegiría Postgres
+// y estas pruebas estarían midiendo otra cosa sin decirlo. El camino de Postgres
+// tiene las suyas en test/store.test.js, con las mismas garantías.
+for (const k of Object.keys(process.env)) {
+  if (/^(POSTGRES|DATABASE|NEON)_.*URL$/.test(k)) delete process.env[k];
+}
+
 const ROOT = path.join(__dirname, '..');
 const STUB = path.join(ROOT, 'node_modules', '@vercel', 'blob');
 const FAKE_BASE = 'https://blob.test.local/';
@@ -70,7 +78,7 @@ const Sync = require('../sync-core.js');
 test.after(removeStub);
 
 // --- utilidades -------------------------------------------------------------
-function call(method, body) {
+function call(method, body, url) {
   return new Promise((resolve) => {
     const res = {
       statusCode: 200,
@@ -80,7 +88,7 @@ function call(method, body) {
       json(payload) { resolve({ status: this.statusCode, body: payload, headers: this.headers }); return this; },
       end() { resolve({ status: this.statusCode, body: null, headers: this.headers }); return this; }
     };
-    handler({ method, body }, res);
+    handler({ method, body, url: url || '/api/data' }, res);
   });
 }
 
@@ -250,4 +258,34 @@ test('un trozo corrupto no impide leer los demás', async () => {
   const r = await call('GET');
   assert.deepEqual(ids(r.body.doc, 'sales'), ['bueno'],
     'lo bueno se sigue leyendo aunque haya un trozo ilegible');
+});
+
+// La app pregunta cada 30 segundos desde dos teléfonos. Casi siempre no ha
+// cambiado nada, y mandar el documento entero para decirlo era gastar los datos
+// móviles de los dos en nada.
+test('con ?desde= no manda el documento si nada ha cambiado', async () => {
+  const t = Date.now();
+  await call('PUT', doc('sales', [{ id: 'v1', total: 10, updatedAt: t }]));
+
+  const entero = await call('GET', null, '/api/data');
+  assert.ok(entero.body.doc, 'sin ?desde= tiene que venir el documento entero');
+  const marca = entero.body.updatedAt;
+  assert.ok(marca > 0, 'tiene que venir una marca de tiempo');
+
+  const corta = await call('GET', null, '/api/data?desde=' + marca);
+  assert.equal(corta.body.sinCambios, true, 'debería decir que no ha cambiado nada');
+  assert.equal(corta.body.doc, undefined, 'no debería mandar el documento');
+
+  // Y en cuanto algo cambia de verdad, vuelve a mandarlo entero.
+  await call('PUT', doc('sales', [{ id: 'v2', total: 20, updatedAt: t + 1000 }]));
+  const otra = await call('GET', null, '/api/data?desde=' + marca);
+  assert.ok(otra.body.doc, 'tras un cambio tiene que volver el documento');
+  assert.ok(otra.body.doc.sales.some(x => x.id === 'v2'), 'y traer lo nuevo');
+});
+
+test('un ?desde= con basura no rompe: manda el documento entero', async () => {
+  for (const malo of ['', 'hola', '-1', 'NaN', '9e999']) {
+    const r = await call('GET', null, '/api/data?desde=' + encodeURIComponent(malo));
+    assert.ok(r.body.doc || r.body.sinCambios, `«${malo}» dejó la respuesta sin nada`);
+  }
 });

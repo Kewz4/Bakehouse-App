@@ -56,6 +56,12 @@ const save=(msg)=>{ordenar();if(!saveLocal())return false;
  render();if(msg)toast(msg);
  sucio=true;escrituras++;setSync(CLOUD?'guardando':'local');scheduleSync(400);return true};
 
+// Lo último que el servidor dijo tener. Se le manda de vuelta para que pueda
+// contestar "nada ha cambiado" sin mandar el documento entero: la app pregunta
+// cada 30 segundos y casi siempre la respuesta es esa, así que mandar 16 kB
+// para decirlo era gastar los datos móviles de los dos en nada.
+let vistoEn=0;
+
 function scheduleSync(ms){if(!CLOUD)return;clearTimeout(syncTimer);syncTimer=setTimeout(syncNow,ms==null?400:ms)}
 
 // Sube lo local y baja lo remoto en un solo viaje: el servidor combina y nos
@@ -70,6 +76,9 @@ async function syncNow(){
   if(!r.ok)throw new Error('http '+r.status);
   const j=await r.json();
   if(j.enabled===false){CLOUD=false;setSync('local');return}
+  // Acabamos de recibir el documento entero: la próxima lectura puede pedir
+  // sólo lo que haya cambiado a partir de aquí.
+  if(j.updatedAt)vistoEn=j.updatedAt;
   if(j.doc){
    // Combinamos otra vez contra lo local por si la usuaria escribió algo
    // mientras el viaje estaba en curso.
@@ -97,10 +106,12 @@ async function syncNow(){
 async function pull(){
  if(!CLOUD||syncing)return;
  try{
-  const r=await fetch('api/data',{cache:'no-store'});
+  const r=await fetch('api/data'+(vistoEn?'?desde='+vistoEn:''),{cache:'no-store'});
   if(!r.ok)return;
   const j=await r.json();
   if(j.enabled===false){CLOUD=false;setSync('local');return}
+  if(j.updatedAt)vistoEn=j.updatedAt;
+  if(j.sinCambios)return;
   if(!j.doc)return;
   const antes=S.canonical(toWire());
   fromWire(S.mergeDocs(toWire(),j.doc));
