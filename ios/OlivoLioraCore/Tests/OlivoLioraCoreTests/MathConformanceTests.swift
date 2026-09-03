@@ -157,7 +157,14 @@ final class MathConformanceTests: XCTestCase {
             let casos: [Caso]
         }
         let gastos: GastosCase
+        struct PendienteCase: Decodable {
+            let `in`: BadgeCase.Input
+            let falta: Bool; let faltan: Int; let total: Int; let vacia: Bool
+        }
+        struct FaltaCase: Decodable { let id: String; let falta: Bool }
         let periodos: PeriodosCase
+        let nutricionPendiente: [PendienteCase]
+        let faltaNutricion: [FaltaCase]
         let countLabel: [CountCase]
         let joinDetail: [JoinCase]
         let recipe: [RecipeCase]
@@ -503,6 +510,45 @@ final class MathConformanceTests: XCTestCase {
             XCTAssertEqual(s.label, c.etiqueta, "\(que): etiqueta")
             XCTAssertEqual(p.movible, c.movible, "\(que): movible")
         }
+    }
+
+    /// El aviso de "aquí falta información nutricional".
+    ///
+    /// Tiene que decir lo mismo en los dos sitios: si el teléfono marcara una
+    /// receta que la web da por completa, ella la completaría dos veces o
+    /// ninguna.
+    func testMissingNutritionMatchesJavaScript() throws {
+        let f = try load()
+        let ingredients = ingredientesDeFixture(f.badgeIngredients)
+
+        for c in f.faltaNutricion {
+            let ing = try XCTUnwrap(ingredients[c.id], "falta «\(c.id)»")
+            XCTAssertEqual(ing.needsNutrition, c.falta, "«\(c.id)»: aviso distinto")
+        }
+
+        for c in f.nutricionPendiente {
+            let lines = c.in.ingredients.map {
+                RecipeLine(ingredientId: $0.ingredientId, name: "x",
+                           qty: $0.qty, unit: $0.unit, cost: 0)
+            }
+            let recipe = Recipe(name: c.in.name, yield: c.in.yield, price: 0, lines: lines)
+            let m = Analytics.macros(for: recipe, ingredients: ingredients)
+            XCTAssertEqual(m.needsNutrition, c.falta, "«\(c.in.name)»: si avisa o no")
+            if c.falta {
+                XCTAssertEqual(m.missing, c.faltan, "«\(c.in.name)»: cuántos faltan")
+                XCTAssertEqual(m.total, c.total, "«\(c.in.name)»: de cuántos")
+            }
+        }
+    }
+
+    private func ingredientesDeFixture(_ raw: [String: JSONValue]) -> [String: Ingredient] {
+        var out: [String: Ingredient] = [:]
+        for (id, valor) in raw {
+            guard let obj = valor.objectValue else { continue }
+            var rec = Record(obj); rec.id = id
+            out[id] = Ingredient(record: rec)
+        }
+        return out
     }
 
     private func gasto(_ e: Fixtures.GastosCase.Entrada) -> Expense {

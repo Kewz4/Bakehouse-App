@@ -72,6 +72,14 @@ public struct RecipeMacros: Sendable {
     public var total: Int = 0
 
     public var isComplete: Bool { counted == total && total > 0 }
+
+    /// Cuántos ingredientes quedan por completar. Cero cuando no falta nada, y
+    /// también cuando la receta todavía no tiene ingredientes: eso no es que le
+    /// falte información, es que aún no es una receta.
+    public var missing: Int { total > 0 ? total - counted : 0 }
+
+    /// ¿Hay que avisar? Una receta vacía no se marca.
+    public var needsNutrition: Bool { total > 0 && counted < total }
     public var hasAny: Bool { counted > 0 }
 
     /// La frase que se le enseña: "Por porción: 190 kcal · 8 g azúcar".

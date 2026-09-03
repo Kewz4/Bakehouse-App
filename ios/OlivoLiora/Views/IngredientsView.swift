@@ -38,9 +38,12 @@ struct IngredientsView: View {
                 let short = Units.info(ing.unitSingle).short
                 HStack(alignment: .top, spacing: 12) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("\(ing.kind.emoji) \(ing.name)")
-                            .font(Theme.rounded(16, .semibold))
-                            .foregroundStyle(Theme.ink)
+                        HStack(spacing: 6) {
+                            Text("\(ing.kind.emoji) \(ing.name)")
+                                .font(Theme.rounded(16, .semibold))
+                                .foregroundStyle(Theme.ink)
+                            if ing.needsNutrition { FaltaBadge(texto: "sin nutrición") }
+                        }
                         // Si dijo cuánto pesa cada uno, se enseña: es el dato
                         // que hace que una receta pueda pedir gramos de algo
                         // que se compra por piezas.
@@ -198,7 +201,9 @@ struct IngredientEditor: View {
 
             costPreview
 
-            macrosSection
+            // Una caja no se come: pedirle calorías sería pedir un dato que no
+            // existe.
+            if kind != .empaque { macrosSection }
 
             Text("Ejemplo: compras una bolsa de harina de 5 libras por $6.50 → escribes “bolsa”, 5 y eliges “libras”. Después en tus recetas puedes usar gramos: la cuenta se hace sola.")
                 .font(Theme.rounded(12))

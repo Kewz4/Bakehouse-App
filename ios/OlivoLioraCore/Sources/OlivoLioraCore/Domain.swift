@@ -164,6 +164,13 @@ public struct Ingredient: RecordBacked, Hashable, Sendable {
         return Conversion(via: via, texto: texto, detalle: detalle)
     }
 
+    /// ¿A este ingrediente le falta la información nutricional?
+    ///
+    /// El empaque no cuenta: una caja no se come, así que pedirle calorías
+    /// sería pedir un dato que no existe, y marcarla enseñaría a ignorar la
+    /// marca.
+    public var needsNutrition: Bool { kind != .empaque && !hasMacros }
+
     /// Por debajo de esto el número se ve como "$0.00".
     public static let costReadable: Double = 0.01
     /// Al subir de unidad, se busca al menos esto.

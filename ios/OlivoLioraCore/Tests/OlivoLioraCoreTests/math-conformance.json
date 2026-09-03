@@ -1543,6 +1543,223 @@
       "fruta": false
     }
   ],
+  "nutricionPendiente": [
+    {
+      "in": {
+        "name": "keto y paleo",
+        "yield": 8,
+        "ingredients": [
+          {
+            "ingredientId": "almendra",
+            "qty": 200,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "huevo",
+            "qty": 3,
+            "unit": "u"
+          }
+        ]
+      },
+      "falta": false,
+      "faltan": 0,
+      "total": 0,
+      "vacia": false
+    },
+    {
+      "in": {
+        "name": "pastel normal",
+        "yield": 10,
+        "ingredients": [
+          {
+            "ingredientId": "trigo",
+            "qty": 300,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "blanca",
+            "qty": 200,
+            "unit": "g"
+          }
+        ]
+      },
+      "falta": false,
+      "faltan": 0,
+      "total": 0,
+      "vacia": false
+    },
+    {
+      "in": {
+        "name": "alto en proteina",
+        "yield": 4,
+        "ingredients": [
+          {
+            "ingredientId": "suero",
+            "qty": 100,
+            "unit": "g"
+          }
+        ]
+      },
+      "falta": false,
+      "faltan": 0,
+      "total": 0,
+      "vacia": false
+    },
+    {
+      "in": {
+        "name": "lacteo sin anadida",
+        "yield": 8,
+        "ingredients": [
+          {
+            "ingredientId": "leche",
+            "qty": 500,
+            "unit": "ml"
+          }
+        ]
+      },
+      "falta": false,
+      "faltan": 0,
+      "total": 0,
+      "vacia": false
+    },
+    {
+      "in": {
+        "name": "con fruta",
+        "yield": 8,
+        "ingredients": [
+          {
+            "ingredientId": "almendra",
+            "qty": 150,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "fresa",
+            "qty": 200,
+            "unit": "g"
+          }
+        ]
+      },
+      "falta": false,
+      "faltan": 0,
+      "total": 0,
+      "vacia": false
+    },
+    {
+      "in": {
+        "name": "poca anadida",
+        "yield": 8,
+        "ingredients": [
+          {
+            "ingredientId": "almendra",
+            "qty": 200,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "blanca",
+            "qty": 10,
+            "unit": "g"
+          }
+        ]
+      },
+      "falta": false,
+      "faltan": 0,
+      "total": 0,
+      "vacia": false
+    },
+    {
+      "in": {
+        "name": "ralladura no cuenta como fruta",
+        "yield": 8,
+        "ingredients": [
+          {
+            "ingredientId": "almendra",
+            "qty": 200,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "ralladura",
+            "qty": 5,
+            "unit": "g"
+          }
+        ]
+      },
+      "falta": false,
+      "faltan": 0,
+      "total": 0,
+      "vacia": false
+    },
+    {
+      "in": {
+        "name": "faltan datos",
+        "yield": 4,
+        "ingredients": [
+          {
+            "ingredientId": "almendra",
+            "qty": 100,
+            "unit": "g"
+          },
+          {
+            "ingredientId": "sinDatos",
+            "qty": 5,
+            "unit": "ml"
+          }
+        ]
+      },
+      "falta": true,
+      "faltan": 1,
+      "total": 2,
+      "vacia": false
+    },
+    {
+      "in": {
+        "name": "sin ingredientes",
+        "yield": 1,
+        "ingredients": []
+      },
+      "falta": false,
+      "faltan": 0,
+      "total": 0,
+      "vacia": true
+    }
+  ],
+  "faltaNutricion": [
+    {
+      "id": "almendra",
+      "falta": false
+    },
+    {
+      "id": "huevo",
+      "falta": false
+    },
+    {
+      "id": "trigo",
+      "falta": false
+    },
+    {
+      "id": "blanca",
+      "falta": false
+    },
+    {
+      "id": "suero",
+      "falta": false
+    },
+    {
+      "id": "fresa",
+      "falta": false
+    },
+    {
+      "id": "leche",
+      "falta": false
+    },
+    {
+      "id": "ralladura",
+      "falta": false
+    },
+    {
+      "id": "sinDatos",
+      "falta": true
+    }
+  ],
   "periodos": {
     "hoy": "2026-09-03",
     "casos": [

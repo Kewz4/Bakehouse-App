@@ -327,6 +327,28 @@ function recipeMacros(r,ingredientsById){
 }
 
 /**
+ * ¿A este ingrediente le falta la información nutricional?
+ *
+ * El empaque no cuenta: una caja no se come, así que pedirle calorías sería
+ * pedir un dato que no existe, y marcarla en rojo enseñaría a ignorar la marca.
+ */
+function faltaNutricion(ing){
+ return !!ing&&aportaMacros(ing)&&!hasMacros(ing)}
+
+/**
+ * Qué le falta a una receta para poder hablar de su nutrición.
+ *
+ * Devuelve null cuando está completa. Cuando no, dice cuántos ingredientes
+ * faltan de cuántos, porque "faltan 2 de 5" se puede arreglar y "faltan datos"
+ * no dice por dónde empezar.
+ */
+function nutricionPendiente(r,ingredientsById){
+ const m=recipeMacros(r,ingredientsById);
+ if(m.total===0)return {faltan:0,total:0,vacia:true};
+ if(m.completo)return null;
+ return {faltan:m.total-m.contadas,total:m.total,vacia:false}}
+
+/**
  * Convierte lo leído de una etiqueta a "por 100 unidades base".
  *
  * El modelo de visión copia los números tal cual los ve y dice a qué se
@@ -769,6 +791,7 @@ return {UNITS:UNITS, unitInfo:unitInfo, FRACCIONES:FRACCIONES, PALABRAS:PALABRAS
         recipeBadges:recipeBadges, esPaleo:esPaleo,
         esFruta:esFruta, nombreEsFruta:nombreEsFruta, FRUTAS:FRUTAS,
         KINDS:KINDS, KIND_KEYS:KIND_KEYS, kindOf:kindOf, aportaMacros:aportaMacros,
+        faltaNutricion:faltaNutricion, nutricionPendiente:nutricionPendiente,
         unitWeight:unitWeight, unitFactor:unitFactor, lineUnitCost:lineUnitCost,
         conversionInfo:conversionInfo, costBreakdown:costBreakdown,
         macroBasis:macroBasis, macroToStore:macroToStore, macroToShow:macroToShow,

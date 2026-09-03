@@ -285,6 +285,14 @@ const out = {
     return { in: u, amount: b.amount, unit: b.unit, etiqueta: b.etiqueta, factor: b.factor };
   }),
   kindOf: categorias.map(i => ({ in: i, kind: B.kindOf(i), fruta: B.esFruta(i) })),
+  nutricionPendiente: badgeRecipes.map(r => {
+    const p = B.nutricionPendiente(r, badgeIngredients);
+    return { in: r, falta: !!p && !p.vacia, faltan: p ? p.faltan : 0,
+             total: p ? p.total : 0, vacia: !!p && p.vacia };
+  }),
+  faltaNutricion: Object.values(badgeIngredients).map(i => ({
+    id: i.id, falta: B.faltaNutricion(i)
+  })),
   periodos: (() => {
     // Un "hoy" fijo: si no, el fixture cambiaría cada día. Las fechas se
     // escriben por componentes locales, no en ISO, para que el huso horario del
@@ -328,7 +336,8 @@ console.log('parseQty:%d prettyQty:%d baseCost:%d recipe:%d macroRecipes:%d -> %
   out.parseQty.length, out.prettyQty.length, out.baseCost.length, out.recipe.length,
   out.macroRecipes.length, path.relative(process.cwd(), OUT));
 console.log('badgeRecipes:%d countLabel:%d joinDetail:%d', out.badgeRecipes.length, out.countLabel.length, out.joinDetail.length);
-console.log('periodos:%d', out.periodos.casos.length);
+console.log('periodos:%d nutriciónPendiente:%d faltaNutrición:%d', out.periodos.casos.length,
+  out.nutricionPendiente.length, out.faltaNutricion.length);
 console.log('gastos: cantidades:%d mes:%s inicio:%s',
   out.gastos.cantidades.length, out.gastos.mes.total.toFixed(2), out.gastos.inicio.total.toFixed(2));
 console.log('escala:%d costBreakdown:%d unitFactor:%d macroBasis:%d kindOf:%d',

@@ -201,11 +201,14 @@ struct RecipeCard: View {
                 if !badges.badges.isEmpty {
                     // Envolvemos en filas: pueden salir varias etiquetas.
                     FlowChips(badges: badges.badges)
-                } else if badges.reason == .missingData {
-                    Text("Añade la información nutricional de todos los ingredientes para ver etiquetas como “Sin azúcar” o “Keto”.")
-                        .font(Theme.rounded(11))
-                        .foregroundStyle(Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
+                } else if badges.reason == .missingData, macros.needsNutrition {
+                    HStack(spacing: 6) {
+                        FaltaBadge(texto: "faltan \(macros.missing) de \(macros.total)")
+                        Text("por completar su información nutricional")
+                            .font(Theme.rounded(11))
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 HStack(spacing: 4) {

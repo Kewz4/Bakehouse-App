@@ -181,6 +181,21 @@ struct PeriodBar: View {
     }
 }
 
+/// La marca de "aquí falta algo". Pequeña y en ámbar: es un recordatorio, no
+/// un error — la app funciona igual sin los macros.
+struct FaltaBadge: View {
+    let texto: String
+
+    var body: some View {
+        Text(texto)
+            .font(Theme.rounded(10, .heavy))
+            .foregroundStyle(Color(hex: 0x8A5A12))
+            .padding(.horizontal, 7)
+            .padding(.vertical, 2)
+            .background(Color(hex: 0xF7E7D5), in: Capsule())
+    }
+}
+
 struct MetricTile: View {
     let caption: String
     let value: String

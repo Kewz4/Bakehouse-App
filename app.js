@@ -314,7 +314,20 @@ const list=data.recipes.filter(r=>(!q||(r.name||'').toLowerCase().includes(q))&&
 const el=$('#recipesList');
 const fr=$('#badgeFilters');if(fr)fr.innerHTML=badgeFilterRow();
 setCount('#recipeCount',list.length,data.recipes.length,'receta','recetas');
-el.innerHTML=list.length?list.map(r=>{const c=recipeCost(r),u=recipeUnitCost(r),p=recipePrice(r),m=recipeMargin(r),cls=!p?'warn':m>=60?'ok':m>=45?'warn':'bad';return `<article class="recipe">${r.photo?`<img class="recipe-photo" src="${esc(r.photo)}" alt="${esc(r.name)}" loading="lazy">`:''}<span class="tag">${esc(r.yield)} porciones</span><h3>${esc(r.name)}</h3><small>${(r.ingredients||[]).length} ingredientes · costo por porción ${money(u)}</small><div class="recipe-data"><div><span>Costo total</span><b>${money(c)}</b></div><div><span>Precio / porción</span><b>${money(p)}</b></div></div><span class="badge ${cls}">${p?`Ganas ${m.toFixed(0)}% de cada venta`:'Falta ponerle precio'}</span>${p&&m<60?`<p class="helper">Cobrando <b>${money(suggestPrice(r))}</b> ganarías más</p>`:''}${macroSummary(r)}${badgeRow(r)}<div class="recipe-actions"><button onclick="openRecipe('${r.id}')">Editar</button><button onclick="duplicateRecipe('${r.id}')">Duplicar</button><button onclick="quickFromRecipe('${r.id}')">Calcular precio</button><button class="negative" onclick="removeItem('recipes','${r.id}')">Eliminar</button></div></article>`}).join(''):`<div class="empty">${q?'Ninguna receta coincide con tu búsqueda.':'Crea tu primer postre y calcula en un minuto cuánto cobrar.'}</div>`}
+el.innerHTML=list.length?list.map(r=>{const c=recipeCost(r),u=recipeUnitCost(r),p=recipePrice(r),m=recipeMargin(r),cls=!p?'warn':m>=60?'ok':m>=45?'warn':'bad';return `<article class="recipe">${r.photo?`<img class="recipe-photo" src="${esc(r.photo)}" alt="${esc(r.name)}" loading="lazy">`:''}<span class="tag">${esc(r.yield)} porciones</span><h3>${esc(r.name)}</h3><small>${(r.ingredients||[]).length} ingredientes · costo por porción ${money(u)}</small><div class="recipe-data"><div><span>Costo total</span><b>${money(c)}</b></div><div><span>Precio / porción</span><b>${money(p)}</b></div></div><span class="badge ${cls}">${p?`Ganas ${m.toFixed(0)}% de cada venta`:'Falta ponerle precio'}</span>${p&&m<60?`<p class="helper">Cobrando <b>${money(suggestPrice(r))}</b> ganarías más</p>`:''}${macroSummary(r)}${faltaNutriRow(r,idx)}${badgeRow(r)}<div class="recipe-actions"><button onclick="openRecipe('${r.id}')">Editar</button><button onclick="duplicateRecipe('${r.id}')">Duplicar</button><button onclick="quickFromRecipe('${r.id}')">Calcular precio</button><button class="negative" onclick="removeItem('recipes','${r.id}')">Eliminar</button></div></article>`}).join(''):`<div class="empty">${q?'Ninguna receta coincide con tu búsqueda.':'Crea tu primer postre y calcula en un minuto cuánto cobrar.'}</div>`}
+/**
+ * La marca de "aquí falta algo".
+ *
+ * Dice cuántos ingredientes faltan de cuántos, no un "faltan datos" a secas:
+ * "faltan 2 de 5" se puede arreglar esta tarde, "faltan datos" no dice por
+ * dónde empezar. Una receta sin ingredientes no se marca: no le falta nada, es
+ * que todavía no es una receta.
+ */
+function faltaNutriRow(r,idx){
+ const p=nutricionPendiente(r,idx);
+ if(!p||p.vacia)return '';
+ return `<p class="falta-linea"><span class="falta">faltan ${p.faltan} de ${p.total}</span> por completar su información nutricional</p>`}
+
 function duplicateRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;data.recipes.push(sello({...r,id:crypto.randomUUID(),name:r.name+' (copia)',ingredients:(r.ingredients||[]).map(i=>({...i}))}));save('Receta duplicada')}
 function quickFromRecipe(id){const r=data.recipes.find(x=>x.id===id);if(!r)return;
  abrirCalculadora(recipeUnitCost(r),r.name,id)}
@@ -398,7 +411,8 @@ renderKindFilters();
 $('#ingredientRows').innerHTML=ing.map(x=>{const k=KINDS.find(z=>z.k===kindOf(x))||KINDS[0];
  const sale=costBreakdown(x).map(c=>money(c.amount)+' / '+esc(c.unit)).join('<br>');
  const trae=x.unitWeight?` · cada uno ${prettyQty(x.unitWeight)} ${esc(unitInfo(x.unitWeightUnit||'g').s)}`:'';
- return `<tr><td class="main"><b>${k.emoji} ${esc(x.name)}</b></td><td data-label="Cómo lo compras">${esc(x.unit)} de ${esc(x.quantity)} ${esc(unitInfo(x.unitSingle).s)}${trae}</td><td data-label="Te costó">${money(x.price)}</td><td class="amount" data-label="Sale a">${sale}</td><td class="actions"><button class="icon-btn" onclick="openIngredient('${x.id}')" aria-label="Editar ingrediente">✎</button><button class="icon-btn" onclick="removeItem('ingredients','${x.id}')" aria-label="Eliminar ingrediente">×</button></td></tr>`}).join('');
+ const sinNutri=faltaNutricion(x)?'<span class="falta" title="Sin información nutricional">sin nutrición</span>':'';
+ return `<tr><td class="main"><b>${k.emoji} ${esc(x.name)}</b>${sinNutri}</td><td data-label="Cómo lo compras">${esc(x.unit)} de ${esc(x.quantity)} ${esc(unitInfo(x.unitSingle).s)}${trae}</td><td data-label="Te costó">${money(x.price)}</td><td class="amount" data-label="Sale a">${sale}</td><td class="actions"><button class="icon-btn" onclick="openIngredient('${x.id}')" aria-label="Editar ingrediente">✎</button><button class="icon-btn" onclick="removeItem('ingredients','${x.id}')" aria-label="Eliminar ingrediente">×</button></td></tr>`}).join('');
 $('#ingredientsEmpty').style.display=ing.length?'none':'block';
 setCount('#ingCount',ing.length,data.ingredients.length,'guardado','guardados')}
 function renderChart(){const src=(window.ALLDATA&&window.ALLDATA.sales)||data.sales;const now=new Date(),vals=[0,0,0,0,0,0],labels=[];
@@ -430,7 +444,9 @@ function macroFields(g){const m=(g&&g.macros)||{};
  const vista=k=>{const v=macroToShow(m[k],u);return v==null?'':esc(v)};
  const filas=MACROS.map(x=>`<div class="field"><label>${x.n} (${x.u})</label>
   <input id="mac_${x.k}" type="number" min="0" step="0.01" inputmode="decimal" value="${vista(x.k)}"></div>`).join('');
- return `<details class="macros"${abierto}>
+ // Una caja no se come: pedirle calorías sería pedir un dato que no existe.
+ const esEmpaque=kindOf(g)==='empaque';
+ return `<details class="macros"${abierto} id="macroFields" style="${esEmpaque?'display:none':''}">
   <summary>Información nutricional <span class="opt">opcional</span></summary>
   <p class="helper">Sirve para saber cuánta azúcar, proteína o grasa lleva cada postre.</p>
   ${VISION?`<div class="scan-row">
@@ -551,6 +567,8 @@ renderIngPreview()}
 function pickKind(btn){
  document.querySelectorAll('.kind-tabs button').forEach(b=>b.classList.toggle('active',b===btn));
  $('#ingKind').value=btn.dataset.kind;
+ const mf=$('#macroFields');
+ if(mf)mf.style.display=btn.dataset.kind==='empaque'?'none':'';
  renderIngPreview()}
 
 /** El peso por pieza sólo tiene sentido para lo que se cuenta. */
