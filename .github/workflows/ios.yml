@@ -243,6 +243,47 @@ jobs:
       # Publicar: de aquí es de donde el teléfono se baja la actualización.
       # ----------------------------------------------------------------------
 
+      # Sin certificados, el .ipa sale sin firmar y no se puede instalar tal
+      # cual. Pero se publica igual, porque un artefacto de Actions no sirve
+      # para esto: hace falta iniciar sesión en GitHub para bajarlo, viene
+      # dentro de un .zip, y desde un iPhone eso es un via crucis. Una Release
+      # da una dirección fija, pública y sin zip:
+      #
+      #   https://github.com/<repo>/releases/latest/download/OlivoLiora.ipa
+      #
+      # Con esa dirección, KravaSign lo firma en el propio teléfono.
+      - name: Publicar el .ipa sin firmar
+        if: env.HAS_SIGNING != 'true' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: ios
+        run: |
+          set -euo pipefail
+          BUILD=${{ github.run_number }}
+          TAG="ios-$MARKETING_VERSION-$BUILD"
+          REPO="${{ github.repository }}"
+
+          gh release create "$TAG" \
+            --repo "$REPO" \
+            --title "Olivo & Liora $MARKETING_VERSION ($BUILD) · sin firmar" \
+            --notes "$(git log -1 --pretty=%s)
+
+          Este .ipa **no está firmado**: hay que firmarlo con KravaSign en el
+          propio iPhone antes de instalarlo. Descárgalo desde el teléfono y
+          ábrelo con KravaSign." \
+            --latest \
+            OlivoLiora.ipa
+
+          {
+            echo "### El .ipa está publicado"
+            echo ""
+            echo "Enlace directo, siempre el más reciente:"
+            echo ""
+            echo "<https://github.com/$REPO/releases/latest/download/OlivoLiora.ipa>"
+            echo ""
+            echo "Va **sin firmar**: ábrelo con KravaSign en el iPhone."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Publicar la versión
         if: env.HAS_SIGNING == 'true' && github.event_name != 'pull_request'
         env:
