@@ -33,6 +33,11 @@ jobs:
         with:
           node-version: '22'
 
+      # Hasta ahora no hacía falta: el código no dependía de nada instalable y
+      # las pruebas simulaban el Blob. `pg` sí es una dependencia de verdad.
+      - name: Instalar dependencias
+        run: npm ci
+
       - name: Pruebas del motor de combinación, del endpoint y del almacén
         run: npm test
         env:
